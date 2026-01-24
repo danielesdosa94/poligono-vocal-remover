@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+python/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs & Temp
+dist/
+release/
+build/
+# *.spec  <-- COMENTADO: Queremos guardar la configuración de compilación
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp files
+.temp_*
+*.tmp
+
+# Binaries (download separately)
+# Agregamos dll por si alguna dependencia la trae
+resources/bin/ffmpeg/*.exe
+resources/bin/motor/
+*.dll
+
+# Models (large files, download separately)
+resources/models/*.th
+resources/models/*.onnx
+resources/models/*.pt
+
+# Test outputs
+separated_*/
+stems_*/
+
+# Environment
+.env
+.env.local
+
+# Python packaging
+*.egg-info/
+*.egg
+.eggs/

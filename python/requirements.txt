@@ -1,0 +1,24 @@
+# Polígono Vocal Remover - Python Dependencies
+# =============================================
+# Install with: pip install -r requirements.txt
+
+# Core AI/ML
+torch>=2.0.0
+torchaudio>=2.0.0
+demucs>=4.0.0
+
+# Audio processing
+numpy>=1.24.0
+scipy>=1.10.0
+soundfile>=0.12.0
+
+# Optional: GPU Support (uncomment for CUDA)
+# Install PyTorch with CUDA from: https://pytorch.org/get-started/locally/
+# Example: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Optional: Additional models
+# onnxruntime-gpu>=1.15.0  # For MDX-Net ONNX models
+
+# Development/Testing
+# pytest>=7.0.0
+# black>=23.0.0

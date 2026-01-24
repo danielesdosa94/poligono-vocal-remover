@@ -1,0 +1,102 @@
+{
+  "name": "poligono-vocal-remover",
+  "version": "1.0.0",
+  "description": "AI-powered vocal removal tool for audio and video files",
+  "main": "src/main.js",
+  "author": "Polígono Studio",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {},
+  "build": {
+    "appId": "com.poligonostudio.vocalremover",
+    "productName": "Polígono Vocal Remover",
+    "copyright": "Copyright © 2024 Polígono Studio",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "!src/**/*.map",
+      "!**/*.{ts,tsx}",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bin",
+        "to": "bin",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "dist/motor",
+        "to": "motor",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/models",
+        "to": "models",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/assets/logo.ico",
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Polígono Vocal Remover",
+      "installerIcon": "resources/assets/logo.ico",
+      "uninstallerIcon": "resources/assets/logo.ico",
+      "installerHeaderIcon": "resources/assets/logo.ico",
+      "license": "LICENSE.txt"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "resources/assets/logo.icns",
+      "category": "public.app-category.music",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "resources/assets/icons",
+      "category": "Audio",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "publish": null
+  }
+}

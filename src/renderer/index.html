@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <title>Polígono Vocal Remover - Skeleton</title>
+    <style>
+        :root {
+            --color-bg: #141414;
+            --color-surface: #1a1a1a;
+            --color-border: #2a2a2a;
+            --color-text: #ffffff;
+            --color-text-muted: #9e9e9e;
+            --color-primary: #D9052E;
+            --color-primary-hover: #ff1c45;
+            --color-success: #4caf50;
+            --color-warning: #ff9800;
+            --color-error: #f44336;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: var(--color-text-muted);
+            font-size: 14px;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        /* Left Panel - Controls */
+        .panel-controls {
+            width: 350px;
+            background: var(--color-surface);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--color-text-muted);
+            margin-bottom: 10px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--color-primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--color-text-muted);
+            border: 1px solid var(--color-border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: var(--color-border);
+            color: var(--color-text);
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--color-error);
+            border: 1px solid var(--color-error);
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--color-error);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Options */
+        .option-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .option-label {
+            font-size: 13px;
+            color: var(--color-text-muted);
+        }
+
+        .option-select {
+            padding: 10px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text);
+            font-size: 14px;
+        }
+
+        /* Right Panel - Console/Status */
+        .panel-console {
+            flex: 1;
+            background: var(--color-surface);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Status Display */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px;
+            background: var(--color-bg);
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--color-text-muted);
+        }
+
+        .status-indicator.running {
+            background: var(--color-warning);
+            animation: pulse 1s infinite;
+        }
+
+        .status-indicator.success {
+            background: var(--color-success);
+        }
+
+        .status-indicator.error {
+            background: var(--color-error);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            flex: 1;
+            font-size: 14px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 15px;
+        }
+
+        .progress-bar-wrapper {
+            height: 8px;
+            background: var(--color-bg);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--color-primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--color-text-muted);
+        }
+
+        /* Console Log */
+        .console-log {
+            flex: 1;
+            background: #0d0d0d;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: var(--color-text-muted);
+            margin-right: 10px;
+        }
+
+        .log-event {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            text-transform: uppercase;
+            margin-right: 8px;
+        }
+
+        .log-event.start { background: #2196f3; }
+        .log-event.progress { background: #9c27b0; }
+        .log-event.step { background: #ff9800; }
+        .log-event.success { background: #4caf50; }
+        .log-event.error { background: #f44336; }
+        .log-event.cancelled { background: #795548; }
+        .log-event.log { background: #607d8b; }
+
+        .log-message {
+            color: var(--color-text);
+            word-break: break-all;
+        }
+
+        /* File Info */
+        .file-info {
+            padding: 15px;
+            background: var(--color-bg);
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .file-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+
+        .file-meta {
+            font-size: 12px;
+            color: var(--color-text-muted);
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🎵 Polígono Vocal Remover</h1>
+        <p>Phase 1: Communication Protocol Testing</p>
+    </header>
+
+    <main class="main">
+        <!-- Controls Panel -->
+        <aside class="panel-controls">
+            <div class="section-title">Input</div>
+            
+            <button id="btn-select-file" class="btn btn-primary">
+                📁 Select File
+            </button>
+
+            <div id="file-info" class="file-info" style="display: none;">
+                <div class="file-name" id="file-name">-</div>
+                <div class="file-meta" id="file-meta">-</div>
+            </div>
+
+            <div class="section-title">Options</div>
+
+            <div class="option-group">
+                <label class="option-label">Model</label>
+                <select id="opt-model" class="option-select">
+                    <option value="htdemucs_ft">Demucs v4 Fine-tuned (Best)</option>
+                    <option value="htdemucs">Demucs v4 Standard</option>
+                    <option value="mdx_extra">MDX-Net Extra (Fast)</option>
+                </select>
+            </div>
+
+            <div class="option-group">
+                <label class="option-label">Quality</label>
+                <select id="opt-quality" class="option-select">
+                    <option value="fast">Fast (1 shift)</option>
+                    <option value="hq" selected>High Quality (2 shifts)</option>
+                    <option value="ultra">Ultra (5 shifts)</option>
+                </select>
+            </div>
+
+            <div class="option-group">
+                <label class="option-label">Device</label>
+                <select id="opt-device" class="option-select">
+                    <option value="auto">Auto-detect</option>
+                    <option value="cuda">GPU (CUDA)</option>
+                    <option value="cpu">CPU Only</option>
+                </select>
+            </div>
+
+            <div class="option-group">
+                <label class="option-label">Output Format</label>
+                <select id="opt-format" class="option-select">
+                    <option value="wav">WAV (Lossless)</option>
+                    <option value="flac">FLAC (Compressed Lossless)</option>
+                    <option value="mp3">MP3 (Lossy)</option>
+                </select>
+            </div>
+
+            <div class="section-title">Actions</div>
+
+            <button id="btn-start" class="btn btn-primary" disabled>
+                ▶️ Start Processing
+            </button>
+
+            <button id="btn-cancel" class="btn btn-danger" disabled>
+                ⏹️ Cancel
+            </button>
+
+            <button id="btn-open-output" class="btn btn-secondary" disabled>
+                📂 Open Output Folder
+            </button>
+        </aside>
+
+        <!-- Console Panel -->
+        <section class="panel-console">
+            <div class="section-title">Status</div>
+
+            <div class="status-bar">
+                <div id="status-indicator" class="status-indicator"></div>
+                <div id="status-text" class="status-text">Ready - Select a file to begin</div>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar-wrapper">
+                    <div id="progress-bar" class="progress-bar"></div>
+                </div>
+                <div class="progress-info">
+                    <span id="progress-step">-</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+            </div>
+
+            <div class="section-title">Protocol Log</div>
+
+            <div id="console-log" class="console-log">
+                <div class="log-entry">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-event log">system</span>
+                    <span class="log-message">Protocol testing interface ready</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        // =================================================================
+        // DOM Elements
+        // =================================================================
+        const elements = {
+            btnSelectFile: document.getElementById('btn-select-file'),
+            btnStart: document.getElementById('btn-start'),
+            btnCancel: document.getElementById('btn-cancel'),
+            btnOpenOutput: document.getElementById('btn-open-output'),
+            fileInfo: document.getElementById('file-info'),
+            fileName: document.getElementById('file-name'),
+            fileMeta: document.getElementById('file-meta'),
+            statusIndicator: document.getElementById('status-indicator'),
+            statusText: document.getElementById('status-text'),
+            progressBar: document.getElementById('progress-bar'),
+            progressStep: document.getElementById('progress-step'),
+            progressPercent: document.getElementById('progress-percent'),
+            consoleLog: document.getElementById('console-log'),
+            optModel: document.getElementById('opt-model'),
+            optQuality: document.getElementById('opt-quality'),
+            optDevice: document.getElementById('opt-device'),
+            optFormat: document.getElementById('opt-format'),
+        };
+
+        // =================================================================
+        // State
+        // =================================================================
+        let currentFile = null;
+        let outputPath = null;
+        let isProcessing = false;
+
+        // =================================================================
+        // Logging
+        // =================================================================
+        function log(event, message, data = null) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            let dataStr = '';
+            if (data) {
+                dataStr = ` | ${JSON.stringify(data)}`;
+            }
+
+            entry.innerHTML = `
+                <span class="log-time">${time}</span>
+                <span class="log-event ${event}">${event}</span>
+                <span class="log-message">${message}${dataStr}</span>
+            `;
+            
+            elements.consoleLog.appendChild(entry);
+            elements.consoleLog.scrollTop = elements.consoleLog.scrollHeight;
+        }
+
+        // =================================================================
+        // UI Updates
+        // =================================================================
+        function setStatus(text, state = 'idle') {
+            elements.statusText.textContent = text;
+            elements.statusIndicator.className = 'status-indicator';
+            if (state !== 'idle') {
+                elements.statusIndicator.classList.add(state);
+            }
+        }
+
+        function setProgress(percent, step = null) {
+            elements.progressBar.style.width = `${percent}%`;
+            elements.progressPercent.textContent = `${Math.round(percent)}%`;
+            if (step) {
+                elements.progressStep.textContent = step;
+            }
+        }
+
+        function setProcessingState(processing) {
+            isProcessing = processing;
+            elements.btnSelectFile.disabled = processing;
+            elements.btnStart.disabled = processing || !currentFile;
+            elements.btnCancel.disabled = !processing;
+            elements.optModel.disabled = processing;
+            elements.optQuality.disabled = processing;
+            elements.optDevice.disabled = processing;
+            elements.optFormat.disabled = processing;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return `${bytes} B`;
+            if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+            return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        }
+
+        // =================================================================
+        // Event Handlers
+        // =================================================================
+        
+        // Select File
+        elements.btnSelectFile.addEventListener('click', async () => {
+            const filePath = await ipcRenderer.invoke('dialog:openFile');
+            if (filePath) {
+                const info = await ipcRenderer.invoke('file:getInfo', filePath);
+                if (info.valid) {
+                    currentFile = info;
+                    elements.fileInfo.style.display = 'block';
+                    elements.fileName.textContent = info.name;
+                    elements.fileMeta.textContent = `${info.type.toUpperCase()} | ${formatFileSize(info.size)} | .${info.extension}`;
+                    elements.btnStart.disabled = false;
+                    log('log', `File selected: ${info.name}`);
+                } else {
+                    log('error', `Invalid file: ${info.reason}`);
+                }
+            }
+        });
+
+        // Start Processing
+        elements.btnStart.addEventListener('click', async () => {
+            if (!currentFile) return;
+
+            setProcessingState(true);
+            setStatus('Starting...', 'running');
+            setProgress(0, 'Initializing');
+
+            const options = {
+                model: elements.optModel.value,
+                quality: elements.optQuality.value,
+                device: elements.optDevice.value,
+                outputFormat: elements.optFormat.value,
+            };
+
+            log('log', 'Starting motor with options', options);
+
+            const result = await ipcRenderer.invoke('motor:start', {
+                inputPath: currentFile.path,
+                outputDir: null, // Use same directory as input
+                options
+            });
+
+            if (!result.success) {
+                log('error', `Failed to start: ${result.error}`);
+                setStatus(`Error: ${result.error}`, 'error');
+                setProcessingState(false);
+            }
+        });
+
+        // Cancel Processing
+        elements.btnCancel.addEventListener('click', async () => {
+            log('log', 'Requesting cancellation...');
+            setStatus('Cancelling...', 'running');
+            const result = await ipcRenderer.invoke('motor:cancel');
+            log('log', 'Cancel result', result);
+        });
+
+        // Open Output Folder
+        elements.btnOpenOutput.addEventListener('click', async () => {
+            if (outputPath) {
+                await ipcRenderer.invoke('shell:openPath', outputPath);
+            }
+        });
+
+        // =================================================================
+        // Motor Event Listeners
+        // =================================================================
+
+        ipcRenderer.on('motor:start', (event, data) => {
+            log('start', `Processing started`, { 
+                model: data.model, 
+                device: data.device,
+                type: data.fileType 
+            });
+            setStatus(`Processing with ${data.model} on ${data.device}`, 'running');
+        });
+
+        ipcRenderer.on('motor:step', (event, data) => {
+            log('step', `Step ${data.stepNumber}/${data.totalSteps}: ${data.step}`);
+            setProgress(
+                (data.stepNumber / data.totalSteps) * 100 * 0.1, // Rough estimate
+                `Step ${data.stepNumber}/${data.totalSteps}: ${data.step}`
+            );
+        });
+
+        ipcRenderer.on('motor:progress', (event, data) => {
+            const globalPercent = data.globalPercent || data.stepPercent || 0;
+            setProgress(globalPercent, data.currentStep || '-');
+            
+            if (data.detail) {
+                setStatus(data.detail, 'running');
+            }
+            
+            // Don't log every progress update (too noisy)
+            if (Math.floor(globalPercent) % 10 === 0) {
+                log('progress', `${Math.round(globalPercent)}%`, { 
+                    step: data.currentStep,
+                    eta: data.etaSeconds 
+                });
+            }
+        });
+
+        ipcRenderer.on('motor:raw-progress', (event, data) => {
+            // Fallback progress from raw Demucs output
+            setProgress(data.percent);
+        });
+
+        ipcRenderer.on('motor:log', (event, data) => {
+            log('log', data.message);
+        });
+
+        ipcRenderer.on('motor:warning', (event, data) => {
+            log('log', `⚠️ ${data.message}`, { code: data.code });
+        });
+
+        ipcRenderer.on('motor:error', (event, data) => {
+            log('error', data.message, { code: data.code, fatal: data.fatal });
+            if (data.fatal) {
+                setStatus(`Error: ${data.message}`, 'error');
+                setProcessingState(false);
+            }
+        });
+
+        ipcRenderer.on('motor:success', (event, data) => {
+            log('success', 'Processing complete!', { 
+                elapsed: data.elapsedSeconds?.toFixed(1) + 's',
+                stems: Object.keys(data.outputs || {})
+            });
+            
+            setProgress(100, 'Complete');
+            setStatus('✅ Processing complete!', 'success');
+            setProcessingState(false);
+            
+            // Store output path for "Open Folder" button
+            if (data.outputs) {
+                const firstOutput = Object.values(data.outputs)[0];
+                if (firstOutput) {
+                    outputPath = require('path').dirname(firstOutput);
+                    elements.btnOpenOutput.disabled = false;
+                }
+            }
+        });
+
+        ipcRenderer.on('motor:cancelled', (event, data) => {
+            log('cancelled', `Cancelled: ${data.reason}`, { 
+                elapsed: data.elapsedSeconds?.toFixed(1) + 's',
+                lastStep: data.lastStep 
+            });
+            setStatus('Cancelled by user', 'error');
+            setProgress(0, '-');
+            setProcessingState(false);
+        });
+
+        ipcRenderer.on('motor:stderr', (event, data) => {
+            log('error', `stderr: ${data}`);
+        });
+
+        // =================================================================
+        // Initialization
+        // =================================================================
+        log('log', 'UI initialized, waiting for file selection');
+    </script>
+</body>
+</html>
