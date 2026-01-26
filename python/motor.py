@@ -434,6 +434,7 @@ def separate_audio(
         progress_pattern = re.compile(r'(\d+)%')
 
         # Read stderr line by line for progress updates
+        # Map Demucs 0-100% to visual 0-90% (reserve 90-100% for post-processing)
         last_progress = 0
         while True:
             # Check cancellation
@@ -459,11 +460,13 @@ def separate_audio(
                 # Try to extract progress percentage
                 match = progress_pattern.search(line)
                 if match:
-                    percent = int(match.group(1))
+                    demucs_percent = int(match.group(1))
+                    # Map Demucs 0-100% to visual 0-90%
+                    visual_percent = int(demucs_percent * 0.90)
                     # Only emit if progress increased (avoid spam)
-                    if percent > last_progress:
-                        protocol.emit_progress(percent, detail=f"Processing: {percent}%")
-                        last_progress = percent
+                    if visual_percent > last_progress:
+                        protocol.emit_progress(visual_percent, detail=f"Processing: {demucs_percent}%")
+                        last_progress = visual_percent
                 else:
                     # Log non-progress lines as debug for visibility
                     if line:
@@ -481,9 +484,8 @@ def separate_audio(
             )
             return None
 
-        # Ensure we show 100% completion
-        if last_progress < 100:
-            protocol.emit_progress(100, detail="Processing complete")
+        # Post-processing phase: Show 95% while finalizing
+        protocol.emit_progress(95, detail="Reconstructing audio & Saving...")
 
         # Check cancellation after processing
         if cancellation_token.is_cancelled:
@@ -491,7 +493,7 @@ def separate_audio(
 
         # Step: Saving
         protocol.emit_step_change(ProcessingStep.SAVING, step_number=5)
-        protocol.emit_progress(0, detail="Organizing output files...")
+        protocol.emit_progress(97, detail="Organizing output files...")
 
         # Find and move output files
         demucs_output = os.path.join(temp_dir, model_name, input_filename)
@@ -508,6 +510,7 @@ def separate_audio(
         if os.path.exists(final_output_dir):
             shutil.rmtree(final_output_dir)
 
+        protocol.emit_progress(98, detail="Moving files...")
         shutil.move(demucs_output, final_output_dir)
 
         # Build output paths dict
