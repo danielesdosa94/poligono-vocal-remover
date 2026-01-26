@@ -36,6 +36,8 @@ import argparse
 import shutil
 import multiprocessing
 import time
+import subprocess
+import re
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
@@ -325,12 +327,12 @@ def separate_audio(
 ) -> Optional[Dict[str, str]]:
     """
     Perform audio separation using Demucs.
-    
+
     This is the core processing function that:
     1. Loads the model
     2. Processes the audio
     3. Saves the separated stems
-    
+
     Args:
         input_path: Path to audio file
         output_dir: Directory for outputs
@@ -340,35 +342,26 @@ def separate_audio(
         shifts_override: Override for number of shifts
         output_format: "wav", "mp3", or "flac"
         cancellation_token: For checking cancellation
-    
+
     Returns:
         Dict mapping stem names to file paths, or None on failure
     """
-    try:
-        # Import here to avoid slow startup if just checking args
-        import torch
-        import demucs.separate
-        
-    except ImportError as e:
-        protocol.emit_error(f"Required library not found: {e}", code="IMPORT_ERROR")
-        return None
-    
     # Get configuration
     model_config = MODEL_CONFIGS.get(model_name)
     quality_config = QUALITY_PRESETS.get(quality_preset)
-    
+
     if not model_config or not quality_config:
         protocol.emit_error("Invalid model or quality configuration", code="CONFIG_ERROR")
         return None
-    
+
     # Determine shifts
     shifts = shifts_override if shifts_override is not None else quality_config["shifts"]
-    
+
     # Create temp working directory
     input_filename = Path(input_path).stem
     temp_dir = os.path.join(output_dir, f".temp_{input_filename}_{int(time.time())}")
     os.makedirs(temp_dir, exist_ok=True)
-    
+
     # Register cleanup
     def cleanup_temp():
         if os.path.exists(temp_dir):
@@ -376,109 +369,168 @@ def separate_audio(
                 shutil.rmtree(temp_dir)
             except Exception:
                 pass
-    
+
     signal_handler.register_cleanup(cleanup_temp)
-    
+
     try:
         # Step: Loading Model
         protocol.emit_step_change(ProcessingStep.LOADING_MODEL, step_number=2)
         protocol.emit_progress(0, detail="Loading neural network weights...")
-        
+
         # Check cancellation
         if cancellation_token.is_cancelled:
             raise CancelledException()
-        
-        # Build Demucs arguments
+
+        # Build Demucs command line arguments
         demucs_args = [
+            sys.executable,  # Use current Python interpreter
+            "-m", "demucs.separate",  # Run demucs as module
             "-n", model_name,
             "-o", temp_dir,
             "-j", "0",  # Workers = 0 to avoid subprocess issues in frozen apps
             "--shifts", str(shifts),
             "--overlap", str(quality_config["overlap"]),
         ]
-        
+
         # Add device flag
         if device == "cpu":
             demucs_args.extend(["-d", "cpu"])
-        
+
         # Add output format if not wav
         if output_format == "mp3":
             demucs_args.extend(["--mp3"])
         elif output_format == "flac":
             demucs_args.extend(["--flac"])
-        
+
         # Add input file
         demucs_args.append(input_path)
-        
+
         protocol.emit_progress(50, detail="Model configuration ready")
-        
+
         # Step: Analyzing
         protocol.emit_step_change(ProcessingStep.ANALYZING, step_number=3)
         protocol.emit_progress(0, detail="Analyzing audio structure...")
-        
+
         # Check cancellation
         if cancellation_token.is_cancelled:
             raise CancelledException()
-        
+
         # Step: Separating (Main processing)
         protocol.emit_step_change(ProcessingStep.SEPARATING, step_number=4)
         protocol.emit_progress(0, detail=f"Separating with {shifts} shift(s)...")
-        
-        # Hook into Demucs progress (if possible)
-        # Note: Demucs doesn't expose easy progress hooks, so we simulate based on time
-        # In production, you might patch demucs.separate to report progress
-        
-        # Run Demucs
-        # This is blocking - in a real implementation, you'd run this in a thread
-        # and poll for progress
-        demucs.separate.main(demucs_args)
-        
+
+        # Run Demucs as subprocess to capture progress
+        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        process = subprocess.Popen(
+            demucs_args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            bufsize=1,  # Line buffered
+            creationflags=creationflags
+        )
+
+        # Regex pattern to match progress percentages (e.g., "45%", "100%")
+        progress_pattern = re.compile(r'(\d+)%')
+
+        # Read stderr line by line for progress updates
+        last_progress = 0
+        while True:
+            # Check cancellation
+            if cancellation_token.is_cancelled:
+                protocol.emit_log("Cancellation requested, terminating Demucs process...", level="debug")
+                process.kill()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+                raise CancelledException()
+
+            # Read line from stderr (Demucs outputs progress to stderr)
+            line = process.stderr.readline()
+
+            # If no more output and process finished, break
+            if not line and process.poll() is not None:
+                break
+
+            if line:
+                line = line.strip()
+
+                # Try to extract progress percentage
+                match = progress_pattern.search(line)
+                if match:
+                    percent = int(match.group(1))
+                    # Only emit if progress increased (avoid spam)
+                    if percent > last_progress:
+                        protocol.emit_progress(percent, detail=f"Processing: {percent}%")
+                        last_progress = percent
+                else:
+                    # Log non-progress lines as debug for visibility
+                    if line:
+                        protocol.emit_log(line, level="debug")
+
+        # Check exit code
+        return_code = process.wait()
+        if return_code != 0:
+            # Read any remaining stderr
+            stderr_output = process.stderr.read()
+            error_msg = stderr_output[:500] if stderr_output else "Unknown error"
+            protocol.emit_error(
+                f"Demucs process failed with code {return_code}: {error_msg}",
+                code="DEMUCS_ERROR"
+            )
+            return None
+
+        # Ensure we show 100% completion
+        if last_progress < 100:
+            protocol.emit_progress(100, detail="Processing complete")
+
         # Check cancellation after processing
         if cancellation_token.is_cancelled:
             raise CancelledException()
-        
+
         # Step: Saving
         protocol.emit_step_change(ProcessingStep.SAVING, step_number=5)
         protocol.emit_progress(0, detail="Organizing output files...")
-        
+
         # Find and move output files
         demucs_output = os.path.join(temp_dir, model_name, input_filename)
-        
+
         if not os.path.exists(demucs_output):
             protocol.emit_error(
                 "Demucs did not produce expected output",
                 code="OUTPUT_MISSING"
             )
             return None
-        
+
         # Create final output directory
         final_output_dir = os.path.join(output_dir, f"separated_{input_filename}")
         if os.path.exists(final_output_dir):
             shutil.rmtree(final_output_dir)
-        
+
         shutil.move(demucs_output, final_output_dir)
-        
+
         # Build output paths dict
         output_paths = {}
         ext = f".{output_format}" if output_format != "wav" else ".wav"
-        
+
         for stem in model_config["stems"]:
             stem_path = os.path.join(final_output_dir, f"{stem}{ext}")
             if os.path.exists(stem_path):
                 output_paths[stem] = stem_path
-        
+
         protocol.emit_progress(100, detail="Files saved successfully")
-        
+
         # Cleanup
         protocol.emit_step_change(ProcessingStep.CLEANUP, step_number=6)
         cleanup_temp()
-        
+
         return output_paths
-        
+
     except CancelledException:
         cleanup_temp()
         raise
-        
+
     except Exception as e:
         protocol.emit_error(f"Separation failed: {str(e)}", code="SEPARATION_ERROR")
         cleanup_temp()
