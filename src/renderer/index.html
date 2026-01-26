@@ -300,7 +300,7 @@
 <body>
     <header class="header">
         <h1>🎵 Polígono Vocal Remover</h1>
-        <p>Phase 1: Communication Protocol Testing</p>
+        <p>AI-Powered Audio Separation</p>
     </header>
 
     <main class="main">
@@ -309,7 +309,7 @@
             <div class="section-title">Input</div>
             
             <button id="btn-select-file" class="btn btn-primary">
-                📁 Select File
+                📁 Select Audio or Video File
             </button>
 
             <div id="file-info" class="file-info" style="display: none;">
@@ -317,25 +317,17 @@
                 <div class="file-meta" id="file-meta">-</div>
             </div>
 
-            <div class="section-title">Options</div>
+            <div class="section-title">Processing Mode</div>
 
             <div class="option-group">
-                <label class="option-label">Model</label>
-                <select id="opt-model" class="option-select">
-                    <option value="htdemucs_ft">Demucs v4 Fine-tuned (Best)</option>
-                    <option value="htdemucs">Demucs v4 Standard</option>
-                    <option value="mdx_extra">MDX-Net Extra (Fast)</option>
+                <label class="option-label">Mode</label>
+                <select id="opt-mode" class="option-select">
+                    <option value="vocal_remover">Vocal Remover (2 Tracks)</option>
+                    <option value="splitter">Stem Splitter (4 Tracks)</option>
                 </select>
             </div>
 
-            <div class="option-group">
-                <label class="option-label">Quality</label>
-                <select id="opt-quality" class="option-select">
-                    <option value="fast">Fast (1 shift)</option>
-                    <option value="hq" selected>High Quality (2 shifts)</option>
-                    <option value="ultra">Ultra (5 shifts)</option>
-                </select>
-            </div>
+            <div class="section-title">Output Settings</div>
 
             <div class="option-group">
                 <label class="option-label">Device</label>
@@ -353,6 +345,31 @@
                     <option value="flac">FLAC (Compressed Lossless)</option>
                     <option value="mp3">MP3 (Lossy)</option>
                 </select>
+            </div>
+
+            <!-- Advanced Settings -->
+            <div class="section-title" style="margin-top: 20px; cursor: pointer; user-select: none;" id="advanced-toggle">
+                Advanced Settings ▼
+            </div>
+
+            <div id="advanced-settings" style="display: none;">
+                <div class="option-group">
+                    <label class="option-label">AI Model</label>
+                    <select id="opt-model" class="option-select">
+                        <option value="htdemucs_ft">Demucs v4 Fine-tuned (Best)</option>
+                        <option value="htdemucs">Demucs v4 Standard</option>
+                        <option value="mdx_extra">MDX-Net Extra (Fast)</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label class="option-label">Quality</label>
+                    <select id="opt-quality" class="option-select">
+                        <option value="fast">Fast (1 shift)</option>
+                        <option value="hq" selected>High Quality (2 shifts)</option>
+                        <option value="ultra">Ultra (5 shifts)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="section-title">Actions</div>
@@ -421,10 +438,13 @@
             progressStep: document.getElementById('progress-step'),
             progressPercent: document.getElementById('progress-percent'),
             consoleLog: document.getElementById('console-log'),
+            optMode: document.getElementById('opt-mode'),
             optModel: document.getElementById('opt-model'),
             optQuality: document.getElementById('opt-quality'),
             optDevice: document.getElementById('opt-device'),
             optFormat: document.getElementById('opt-format'),
+            advancedToggle: document.getElementById('advanced-toggle'),
+            advancedSettings: document.getElementById('advanced-settings'),
         };
 
         // =================================================================
@@ -481,6 +501,7 @@
             elements.btnSelectFile.disabled = processing;
             elements.btnStart.disabled = processing || !currentFile;
             elements.btnCancel.disabled = !processing;
+            elements.optMode.disabled = processing;
             elements.optModel.disabled = processing;
             elements.optQuality.disabled = processing;
             elements.optDevice.disabled = processing;
@@ -496,7 +517,14 @@
         // =================================================================
         // Event Handlers
         // =================================================================
-        
+
+        // Advanced Settings Toggle
+        elements.advancedToggle.addEventListener('click', () => {
+            const isVisible = elements.advancedSettings.style.display !== 'none';
+            elements.advancedSettings.style.display = isVisible ? 'none' : 'block';
+            elements.advancedToggle.textContent = isVisible ? 'Advanced Settings ▼' : 'Advanced Settings ▲';
+        });
+
         // Select File
         elements.btnSelectFile.addEventListener('click', async () => {
             const filePath = await ipcRenderer.invoke('dialog:openFile');
@@ -524,6 +552,7 @@
             setProgress(0, 'Initializing');
 
             const options = {
+                mode: elements.optMode.value,
                 model: elements.optModel.value,
                 quality: elements.optQuality.value,
                 device: elements.optDevice.value,

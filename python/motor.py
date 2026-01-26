@@ -38,6 +38,7 @@ import multiprocessing
 import time
 import subprocess
 import re
+import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
@@ -156,13 +157,20 @@ def parse_arguments() -> argparse.Namespace:
         default="wav",
         help="Output audio format"
     )
-    
+
+    parser.add_argument(
+        "--mode",
+        choices=["vocal_remover", "splitter"],
+        default="vocal_remover",
+        help="Processing mode: vocal_remover (2 tracks) or splitter (4 tracks)"
+    )
+
     parser.add_argument(
         "--ffmpeg-path",
         default=None,
         help="Path to FFmpeg binary (for video processing)"
     )
-    
+
     return parser.parse_args()
 
 
@@ -315,6 +323,90 @@ def extract_audio_from_video(
 # AUDIO SEPARATION (Main Processing)
 # =============================================================================
 
+def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> bool:
+    """
+    Mix bass, drums, and other stems into a single instrumental track.
+
+    Args:
+        output_dir: Directory containing separated stems
+        output_format: Output format (wav, mp3, flac)
+        stems: List of all stems from the model
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        import soundfile as sf
+
+        ext = f".{output_format}" if output_format != "wav" else ".wav"
+
+        # Define stems to mix
+        stems_to_mix = ["bass", "drums", "other"]
+
+        # Read all stems to mix
+        audio_data = []
+        sample_rate = None
+
+        for stem_name in stems_to_mix:
+            stem_path = os.path.join(output_dir, f"{stem_name}{ext}")
+            if not os.path.exists(stem_path):
+                protocol.emit_log(f"Stem not found: {stem_name}{ext}", level="debug")
+                continue
+
+            try:
+                data, sr = sf.read(stem_path)
+                if sample_rate is None:
+                    sample_rate = sr
+                elif sr != sample_rate:
+                    protocol.emit_warning(f"Sample rate mismatch for {stem_name}", code="SAMPLE_RATE_MISMATCH")
+                    continue
+
+                audio_data.append(data)
+                protocol.emit_log(f"Loaded {stem_name} for mixing: shape={data.shape}", level="debug")
+            except Exception as e:
+                protocol.emit_log(f"Error reading {stem_name}: {e}", level="debug")
+                continue
+
+        if not audio_data:
+            protocol.emit_error("No stems found to mix", code="NO_STEMS")
+            return False
+
+        # Mix by averaging (prevents clipping)
+        mixed = np.mean(audio_data, axis=0)
+
+        # Save instrumental track
+        instrumental_path = os.path.join(output_dir, f"instrumental{ext}")
+
+        # For MP3 and FLAC, we need to handle format-specific parameters
+        if output_format == "mp3":
+            sf.write(instrumental_path, mixed, sample_rate, format='MP3')
+        elif output_format == "flac":
+            sf.write(instrumental_path, mixed, sample_rate, format='FLAC')
+        else:  # wav
+            sf.write(instrumental_path, mixed, sample_rate)
+
+        protocol.emit_log(f"Instrumental track saved: {instrumental_path}", level="debug")
+
+        # Delete original stems
+        for stem_name in stems_to_mix:
+            stem_path = os.path.join(output_dir, f"{stem_name}{ext}")
+            if os.path.exists(stem_path):
+                try:
+                    os.remove(stem_path)
+                    protocol.emit_log(f"Removed {stem_name}{ext}", level="debug")
+                except Exception as e:
+                    protocol.emit_log(f"Failed to remove {stem_name}{ext}: {e}", level="debug")
+
+        return True
+
+    except ImportError:
+        protocol.emit_error("soundfile library not found", code="IMPORT_ERROR")
+        return False
+    except Exception as e:
+        protocol.emit_error(f"Failed to mix instrumental: {str(e)}", code="MIX_ERROR")
+        return False
+
+
 def separate_audio(
     input_path: str,
     output_dir: str,
@@ -323,6 +415,7 @@ def separate_audio(
     quality_preset: str,
     shifts_override: Optional[int],
     output_format: str,
+    processing_mode: str,
     cancellation_token: CancellationToken
 ) -> Optional[Dict[str, str]]:
     """
@@ -332,6 +425,7 @@ def separate_audio(
     1. Loads the model
     2. Processes the audio
     3. Saves the separated stems
+    4. Optionally mixes stems based on processing mode
 
     Args:
         input_path: Path to audio file
@@ -341,6 +435,7 @@ def separate_audio(
         quality_preset: "fast", "hq", or "ultra"
         shifts_override: Override for number of shifts
         output_format: "wav", "mp3", or "flac"
+        processing_mode: "vocal_remover" (2 tracks) or "splitter" (4 tracks)
         cancellation_token: For checking cancellation
 
     Returns:
@@ -522,6 +617,31 @@ def separate_audio(
             if os.path.exists(stem_path):
                 output_paths[stem] = stem_path
 
+        # Process based on mode
+        if processing_mode == "vocal_remover":
+            protocol.emit_progress(99, detail="Mixing instrumental track...")
+            protocol.emit_log("Mixing bass, drums, and other into instrumental track", level="info")
+
+            # Mix bass, drums, and other into instrumental
+            success = mix_instrumental_track(
+                final_output_dir,
+                output_format,
+                model_config["stems"]
+            )
+
+            if success:
+                # Update output_paths to reflect only vocals and instrumental
+                instrumental_path = os.path.join(final_output_dir, f"instrumental{ext}")
+                vocals_path = output_paths.get("vocals")
+
+                output_paths = {
+                    "vocals": vocals_path,
+                    "instrumental": instrumental_path
+                }
+                protocol.emit_log("Instrumental track created successfully", level="info")
+            else:
+                protocol.emit_warning("Failed to mix instrumental track, keeping all stems", code="MIX_WARNING")
+
         protocol.emit_progress(100, detail="Files saved successfully")
 
         # Cleanup
@@ -632,6 +752,7 @@ def main() -> int:
             quality_preset=args.quality,
             shifts_override=args.shifts,
             output_format=args.output_format,
+            processing_mode=args.mode,
             cancellation_token=cancellation_token
         )
         

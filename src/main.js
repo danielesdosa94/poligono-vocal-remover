@@ -98,6 +98,9 @@ class ProcessManager {
         args.push(inputPath, outputDir);
 
         // Optional arguments
+        if (options.mode) {
+            args.push('--mode', options.mode);
+        }
         if (options.model) {
             args.push('--model', options.model);
         }
