@@ -176,14 +176,16 @@ class ProcessManager {
             // Handle process exit
             this.currentProcess.on('close', (code, signal) => {
                 console.log(`[Motor] Process exited with code ${code}, signal ${signal}`);
-                
+
                 const wasShuttingDown = this.isShuttingDown;
+
+                // CRITICAL: Cleanup BEFORE sending events to prevent race condition
                 this.cleanup();
 
                 if (wasShuttingDown) {
-                    this.sendToRenderer('motor:cancelled', { 
+                    this.sendToRenderer('motor:cancelled', {
                         reason: 'User cancelled',
-                        code 
+                        code
                     });
                 } else if (code !== 0 && code !== null) {
                     this.sendToRenderer('motor:error', {
@@ -410,22 +412,22 @@ function createWindow() {
  */
 ipcMain.handle('dialog:openFile', async () => {
     const allExtensions = [...CONFIG.supportedAudio, ...CONFIG.supportedVideo];
-    
+
     const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Select Audio or Video File',
-        properties: ['openFile'],
+        title: 'Select Audio or Video Files',
+        properties: ['openFile', 'multiSelections'], // Enable multiple file selection
         filters: [
-            { 
-                name: 'Media Files', 
-                extensions: allExtensions 
+            {
+                name: 'Media Files',
+                extensions: allExtensions
             },
-            { 
-                name: 'Audio Files', 
-                extensions: CONFIG.supportedAudio 
+            {
+                name: 'Audio Files',
+                extensions: CONFIG.supportedAudio
             },
-            { 
-                name: 'Video Files', 
-                extensions: CONFIG.supportedVideo 
+            {
+                name: 'Video Files',
+                extensions: CONFIG.supportedVideo
             },
         ]
     });
@@ -434,7 +436,8 @@ ipcMain.handle('dialog:openFile', async () => {
         return null;
     }
 
-    return result.filePaths[0];
+    // Return array of file paths for batch processing
+    return result.filePaths;
 });
 
 /**

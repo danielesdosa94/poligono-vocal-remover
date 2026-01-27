@@ -767,30 +767,39 @@
         elements.dropZone.addEventListener('click', async () => {
             const filePaths = await ipcRenderer.invoke('dialog:openFile');
             if (filePaths) {
-                // Handle both single file (string) and multiple files (array)
-                const paths = Array.isArray(filePaths) ? filePaths : [filePaths];
-                await addFiles(paths);
+                // dialog:openFile now always returns an array
+                await addFiles(filePaths);
             }
         });
 
         // Drop Zone - Drag and drop
+        elements.dropZone.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
         elements.dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             elements.dropZone.classList.add('drag-over');
         });
 
-        elements.dropZone.addEventListener('dragleave', () => {
+        elements.dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             elements.dropZone.classList.remove('drag-over');
         });
 
         elements.dropZone.addEventListener('drop', async (e) => {
             e.preventDefault();
+            e.stopPropagation();
             elements.dropZone.classList.remove('drag-over');
 
             const files = Array.from(e.dataTransfer.files);
             const filePaths = files.map(f => f.path);
 
             if (filePaths.length > 0) {
+                logConsole(`Dropped ${filePaths.length} file(s)`);
                 await addFiles(filePaths);
             }
         });
@@ -876,6 +885,11 @@
                 if (!state.isProcessing) {
                     break;
                 }
+
+                // CRITICAL: Wait 1 second before starting next job to prevent race condition
+                // This gives the main process time to cleanup properly
+                logConsole('Waiting 1s before next job...');
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
             state.isProcessing = false;
@@ -1035,6 +1049,19 @@
         elements.consoleToggle.addEventListener('click', () => {
             const isOpen = elements.consoleLog.classList.toggle('open');
             elements.consoleToggle.textContent = isOpen ? 'Debug Log ▲' : 'Debug Log ▼';
+        });
+
+        // =================================================================
+        // Prevent default drag & drop behavior on entire window
+        // =================================================================
+
+        // Prevent browser from opening dropped files outside the drop zone
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault();
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault();
         });
 
         // =================================================================
