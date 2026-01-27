@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
-    <title>Polígono Vocal Remover - Skeleton</title>
+    <title>Polígono Vocal Remover</title>
     <style>
         :root {
             --color-bg: #141414;
@@ -17,6 +17,8 @@
             --color-success: #4caf50;
             --color-warning: #ff9800;
             --color-error: #f44336;
+            --color-pending: #616161;
+            --color-processing: #2196f3;
         }
 
         * {
@@ -58,17 +60,19 @@
             display: flex;
             gap: 20px;
             padding: 20px;
+            overflow: hidden;
         }
 
-        /* Left Panel - Controls */
-        .panel-controls {
-            width: 350px;
+        /* Left Panel - Global Settings */
+        .panel-settings {
+            width: 320px;
             background: var(--color-surface);
             border-radius: 8px;
             padding: 20px;
             display: flex;
             flex-direction: column;
             gap: 15px;
+            overflow-y: auto;
         }
 
         .section-title {
@@ -77,7 +81,72 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             color: var(--color-text-muted);
+            margin-bottom: 5px;
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            border: 2px dashed var(--color-border);
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--color-bg);
+        }
+
+        .drop-zone:hover {
+            border-color: var(--color-primary);
+            background: rgba(217, 5, 46, 0.05);
+        }
+
+        .drop-zone.drag-over {
+            border-color: var(--color-primary);
+            background: rgba(217, 5, 46, 0.1);
+            transform: scale(1.02);
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
             margin-bottom: 10px;
+        }
+
+        .drop-zone-text {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .drop-zone-hint {
+            font-size: 12px;
+            color: var(--color-text-muted);
+        }
+
+        /* Options */
+        .option-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .option-label {
+            font-size: 13px;
+            color: var(--color-text-muted);
+        }
+
+        .option-select {
+            padding: 10px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            color: var(--color-text);
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .option-select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* Buttons */
@@ -89,8 +158,7 @@
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            text-align: center;
         }
 
         .btn-primary {
@@ -114,220 +182,326 @@
             color: var(--color-text);
         }
 
-        .btn-danger {
-            background: transparent;
-            color: var(--color-error);
-            border: 1px solid var(--color-error);
-        }
-
-        .btn-danger:hover:not(:disabled) {
-            background: var(--color-error);
-            color: white;
-        }
-
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
         }
 
-        /* Options */
-        .option-group {
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* Advanced Settings Collapsible */
+        .advanced-header {
+            cursor: pointer;
+            user-select: none;
             display: flex;
-            flex-direction: column;
+            align-items: center;
             gap: 8px;
+            padding: 10px 0;
+            transition: color 0.2s;
         }
 
-        .option-label {
-            font-size: 13px;
-            color: var(--color-text-muted);
+        .advanced-header:hover {
+            color: var(--color-primary);
         }
 
-        .option-select {
-            padding: 10px;
-            background: var(--color-bg);
-            border: 1px solid var(--color-border);
-            border-radius: 4px;
-            color: var(--color-text);
-            font-size: 14px;
+        .advanced-arrow {
+            transition: transform 0.3s ease;
         }
 
-        /* Right Panel - Console/Status */
-        .panel-console {
+        .advanced-arrow.open {
+            transform: rotate(90deg);
+        }
+
+        .advanced-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .advanced-content.open {
+            max-height: 300px;
+        }
+
+        /* Right Panel - Queue */
+        .panel-queue {
             flex: 1;
             background: var(--color-surface);
             border-radius: 8px;
             padding: 20px;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
-        /* Status Display */
-        .status-bar {
+        .queue-header {
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 10px;
-            padding: 15px;
-            background: var(--color-bg);
-            border-radius: 6px;
             margin-bottom: 15px;
         }
 
-        .status-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--color-text-muted);
+        .queue-stats {
+            font-size: 13px;
+            color: var(--color-text-muted);
         }
 
-        .status-indicator.running {
-            background: var(--color-warning);
-            animation: pulse 1s infinite;
+        .queue-actions {
+            display: flex;
+            gap: 10px;
         }
 
-        .status-indicator.success {
-            background: var(--color-success);
-        }
-
-        .status-indicator.error {
-            background: var(--color-error);
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        .status-text {
+        /* Job List */
+        .job-list {
             flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .job-list:empty::before {
+            content: 'No files in queue. Drop or select files to begin.';
+            display: block;
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--color-text-muted);
             font-size: 14px;
         }
 
-        /* Progress Bar */
-        .progress-container {
-            margin-bottom: 15px;
+        /* Job Item */
+        .job-item {
+            background: var(--color-bg);
+            border-radius: 6px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            border-left: 4px solid var(--color-pending);
+            transition: all 0.2s ease;
         }
 
-        .progress-bar-wrapper {
-            height: 8px;
-            background: var(--color-bg);
-            border-radius: 4px;
+        .job-item.pending {
+            border-left-color: var(--color-pending);
+        }
+
+        .job-item.processing {
+            border-left-color: var(--color-processing);
+            background: rgba(33, 150, 243, 0.05);
+        }
+
+        .job-item.completed {
+            border-left-color: var(--color-success);
+        }
+
+        .job-item.error {
+            border-left-color: var(--color-error);
+        }
+
+        /* Job Status Icon */
+        .job-status {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            background: var(--color-surface);
+        }
+
+        .job-item.pending .job-status {
+            color: var(--color-pending);
+        }
+
+        .job-item.processing .job-status {
+            color: var(--color-processing);
+            animation: spin 2s linear infinite;
+        }
+
+        .job-item.completed .job-status {
+            color: var(--color-success);
+        }
+
+        .job-item.error .job-status {
+            color: var(--color-error);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Job Info */
+        .job-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .job-name {
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
             overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 5px;
+        }
+
+        .job-meta {
+            font-size: 11px;
+            color: var(--color-text-muted);
             margin-bottom: 8px;
         }
 
-        .progress-bar {
+        /* Job Progress Bar */
+        .job-progress {
+            height: 4px;
+            background: var(--color-surface);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .job-progress-bar {
             height: 100%;
-            background: var(--color-primary);
+            background: var(--color-processing);
             width: 0%;
             transition: width 0.3s ease;
         }
 
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
+        .job-item.completed .job-progress-bar {
+            background: var(--color-success);
+            width: 100%;
+        }
+
+        .job-item.error .job-progress-bar {
+            background: var(--color-error);
+        }
+
+        .job-detail {
+            font-size: 11px;
             color: var(--color-text-muted);
         }
 
-        /* Console Log */
+        /* Job Actions */
+        .job-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .job-btn {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 4px;
+            background: var(--color-surface);
+            color: var(--color-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .job-btn:hover {
+            background: var(--color-border);
+            color: var(--color-text);
+        }
+
+        .job-btn.remove:hover {
+            background: var(--color-error);
+            color: white;
+        }
+
+        .job-btn.open:hover {
+            background: var(--color-success);
+            color: white;
+        }
+
+        .job-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Console Log (collapsible) */
+        .console-section {
+            margin-top: 15px;
+            border-top: 1px solid var(--color-border);
+            padding-top: 15px;
+        }
+
+        .console-toggle {
+            cursor: pointer;
+            user-select: none;
+            padding: 8px;
+            margin: -8px;
+            transition: color 0.2s;
+        }
+
+        .console-toggle:hover {
+            color: var(--color-primary);
+        }
+
         .console-log {
-            flex: 1;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
             background: #0d0d0d;
             border-radius: 6px;
-            padding: 15px;
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 12px;
+            font-size: 11px;
+            margin-top: 10px;
+        }
+
+        .console-log.open {
+            max-height: 200px;
             overflow-y: auto;
-            max-height: 400px;
+            padding: 10px;
         }
 
         .log-entry {
-            padding: 4px 0;
-            border-bottom: 1px solid var(--color-border);
-        }
-
-        .log-entry:last-child {
-            border-bottom: none;
-        }
-
-        .log-time {
+            padding: 2px 0;
             color: var(--color-text-muted);
-            margin-right: 10px;
         }
 
-        .log-event {
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
-            text-transform: uppercase;
-            margin-right: 8px;
-        }
-
-        .log-event.start { background: #2196f3; }
-        .log-event.progress { background: #9c27b0; }
-        .log-event.step { background: #ff9800; }
-        .log-event.success { background: #4caf50; }
-        .log-event.error { background: #f44336; }
-        .log-event.cancelled { background: #795548; }
-        .log-event.log { background: #607d8b; }
-
-        .log-message {
-            color: var(--color-text);
-            word-break: break-all;
-        }
-
-        /* File Info */
-        .file-info {
-            padding: 15px;
-            background: var(--color-bg);
-            border-radius: 6px;
-            margin-bottom: 15px;
-        }
-
-        .file-name {
-            font-weight: 600;
-            margin-bottom: 5px;
-            word-break: break-all;
-        }
-
-        .file-meta {
-            font-size: 12px;
-            color: var(--color-text-muted);
+        .log-entry .log-level {
+            color: var(--color-primary);
+            margin-right: 5px;
         }
     </style>
 </head>
 <body>
     <header class="header">
         <h1>🎵 Polígono Vocal Remover</h1>
-        <p>AI-Powered Audio Separation</p>
+        <p>AI-Powered Audio Separation - Batch Processing</p>
     </header>
 
     <main class="main">
-        <!-- Controls Panel -->
-        <aside class="panel-controls">
-            <div class="section-title">Input</div>
-            
-            <button id="btn-select-file" class="btn btn-primary">
-                📁 Select Audio or Video File
-            </button>
+        <!-- Settings Panel -->
+        <aside class="panel-settings">
+            <div class="section-title">Add Files</div>
 
-            <div id="file-info" class="file-info" style="display: none;">
-                <div class="file-name" id="file-name">-</div>
-                <div class="file-meta" id="file-meta">-</div>
+            <div id="drop-zone" class="drop-zone">
+                <div class="drop-zone-icon">🎵</div>
+                <div class="drop-zone-text">Drop Audio or Video Files</div>
+                <div class="drop-zone-hint">Or click to browse (supports multiple files)</div>
             </div>
 
-            <div class="section-title">Processing Mode</div>
+            <div class="section-title">Global Settings</div>
 
             <div class="option-group">
-                <label class="option-label">Mode</label>
+                <label class="option-label">Processing Mode</label>
                 <select id="opt-mode" class="option-select">
                     <option value="vocal_remover">Vocal Remover (2 Tracks)</option>
                     <option value="splitter">Stem Splitter (4 Tracks)</option>
                 </select>
             </div>
-
-            <div class="section-title">Output Settings</div>
 
             <div class="option-group">
                 <label class="option-label">Device</label>
@@ -348,11 +522,12 @@
             </div>
 
             <!-- Advanced Settings -->
-            <div class="section-title" style="margin-top: 20px; cursor: pointer; user-select: none;" id="advanced-toggle">
-                Advanced Settings ▼
+            <div class="advanced-header" id="advanced-toggle">
+                <span class="advanced-arrow">▶</span>
+                <span class="section-title" style="margin: 0;">Advanced Settings</span>
             </div>
 
-            <div id="advanced-settings" style="display: none;">
+            <div class="advanced-content" id="advanced-settings">
                 <div class="option-group">
                     <label class="option-label">AI Model</label>
                     <select id="opt-model" class="option-select">
@@ -372,47 +547,43 @@
                 </div>
             </div>
 
-            <div class="section-title">Actions</div>
+            <div class="section-title" style="margin-top: 10px;">Queue Actions</div>
 
-            <button id="btn-start" class="btn btn-primary" disabled>
-                ▶️ Start Processing
+            <button id="btn-start-queue" class="btn btn-primary" disabled>
+                ▶️ Start Queue
             </button>
 
-            <button id="btn-cancel" class="btn btn-danger" disabled>
-                ⏹️ Cancel
+            <button id="btn-stop-queue" class="btn btn-secondary" disabled>
+                ⏹️ Stop Queue
             </button>
 
-            <button id="btn-open-output" class="btn btn-secondary" disabled>
-                📂 Open Output Folder
+            <button id="btn-clear-completed" class="btn btn-secondary">
+                🗑️ Clear Completed
             </button>
         </aside>
 
-        <!-- Console Panel -->
-        <section class="panel-console">
-            <div class="section-title">Status</div>
-
-            <div class="status-bar">
-                <div id="status-indicator" class="status-indicator"></div>
-                <div id="status-text" class="status-text">Ready - Select a file to begin</div>
-            </div>
-
-            <div class="progress-container">
-                <div class="progress-bar-wrapper">
-                    <div id="progress-bar" class="progress-bar"></div>
-                </div>
-                <div class="progress-info">
-                    <span id="progress-step">-</span>
-                    <span id="progress-percent">0%</span>
+        <!-- Queue Panel -->
+        <section class="panel-queue">
+            <div class="queue-header">
+                <div>
+                    <div class="section-title">Job Queue</div>
+                    <div class="queue-stats" id="queue-stats">
+                        0 pending · 0 processing · 0 completed
+                    </div>
                 </div>
             </div>
 
-            <div class="section-title">Protocol Log</div>
+            <div id="job-list" class="job-list">
+                <!-- Job items will be inserted here dynamically -->
+            </div>
 
-            <div id="console-log" class="console-log">
-                <div class="log-entry">
-                    <span class="log-time">--:--:--</span>
-                    <span class="log-event log">system</span>
-                    <span class="log-message">Protocol testing interface ready</span>
+            <!-- Console Log (Optional) -->
+            <div class="console-section">
+                <div class="section-title console-toggle" id="console-toggle">
+                    Debug Log ▼
+                </div>
+                <div id="console-log" class="console-log">
+                    <!-- Log entries will be inserted here -->
                 </div>
             </div>
         </section>
@@ -420,92 +591,70 @@
 
     <script>
         const { ipcRenderer } = require('electron');
+        const path = require('path');
+
+        // =================================================================
+        // State Management
+        // =================================================================
+
+        const state = {
+            queue: [], // Array of job objects
+            isProcessing: false,
+            currentJobId: null,
+            nextJobId: 1,
+        };
+
+        // Job states: 'pending', 'processing', 'completed', 'error'
+        function createJob(fileInfo) {
+            return {
+                id: state.nextJobId++,
+                file: fileInfo,
+                status: 'pending',
+                progress: 0,
+                detail: 'Waiting...',
+                error: null,
+                outputPath: null,
+            };
+        }
 
         // =================================================================
         // DOM Elements
         // =================================================================
+
         const elements = {
-            btnSelectFile: document.getElementById('btn-select-file'),
-            btnStart: document.getElementById('btn-start'),
-            btnCancel: document.getElementById('btn-cancel'),
-            btnOpenOutput: document.getElementById('btn-open-output'),
-            fileInfo: document.getElementById('file-info'),
-            fileName: document.getElementById('file-name'),
-            fileMeta: document.getElementById('file-meta'),
-            statusIndicator: document.getElementById('status-indicator'),
-            statusText: document.getElementById('status-text'),
-            progressBar: document.getElementById('progress-bar'),
-            progressStep: document.getElementById('progress-step'),
-            progressPercent: document.getElementById('progress-percent'),
-            consoleLog: document.getElementById('console-log'),
+            dropZone: document.getElementById('drop-zone'),
+            jobList: document.getElementById('job-list'),
+            queueStats: document.getElementById('queue-stats'),
+            btnStartQueue: document.getElementById('btn-start-queue'),
+            btnStopQueue: document.getElementById('btn-stop-queue'),
+            btnClearCompleted: document.getElementById('btn-clear-completed'),
             optMode: document.getElementById('opt-mode'),
-            optModel: document.getElementById('opt-model'),
-            optQuality: document.getElementById('opt-quality'),
             optDevice: document.getElementById('opt-device'),
             optFormat: document.getElementById('opt-format'),
+            optModel: document.getElementById('opt-model'),
+            optQuality: document.getElementById('opt-quality'),
             advancedToggle: document.getElementById('advanced-toggle'),
             advancedSettings: document.getElementById('advanced-settings'),
+            consoleToggle: document.getElementById('console-toggle'),
+            consoleLog: document.getElementById('console-log'),
         };
 
         // =================================================================
-        // State
+        // UI Helpers
         // =================================================================
-        let currentFile = null;
-        let outputPath = null;
-        let isProcessing = false;
 
-        // =================================================================
-        // Logging
-        // =================================================================
-        function log(event, message, data = null) {
-            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            
-            let dataStr = '';
-            if (data) {
-                dataStr = ` | ${JSON.stringify(data)}`;
-            }
+        function updateQueueStats() {
+            const pending = state.queue.filter(j => j.status === 'pending').length;
+            const processing = state.queue.filter(j => j.status === 'processing').length;
+            const completed = state.queue.filter(j => j.status === 'completed').length;
 
-            entry.innerHTML = `
-                <span class="log-time">${time}</span>
-                <span class="log-event ${event}">${event}</span>
-                <span class="log-message">${message}${dataStr}</span>
-            `;
-            
-            elements.consoleLog.appendChild(entry);
-            elements.consoleLog.scrollTop = elements.consoleLog.scrollHeight;
-        }
+            elements.queueStats.textContent =
+                `${pending} pending · ${processing} processing · ${completed} completed`;
 
-        // =================================================================
-        // UI Updates
-        // =================================================================
-        function setStatus(text, state = 'idle') {
-            elements.statusText.textContent = text;
-            elements.statusIndicator.className = 'status-indicator';
-            if (state !== 'idle') {
-                elements.statusIndicator.classList.add(state);
-            }
-        }
-
-        function setProgress(percent, step = null) {
-            elements.progressBar.style.width = `${percent}%`;
-            elements.progressPercent.textContent = `${Math.round(percent)}%`;
-            if (step) {
-                elements.progressStep.textContent = step;
-            }
-        }
-
-        function setProcessingState(processing) {
-            isProcessing = processing;
-            elements.btnSelectFile.disabled = processing;
-            elements.btnStart.disabled = processing || !currentFile;
-            elements.btnCancel.disabled = !processing;
-            elements.optMode.disabled = processing;
-            elements.optModel.disabled = processing;
-            elements.optQuality.disabled = processing;
-            elements.optDevice.disabled = processing;
-            elements.optFormat.disabled = processing;
+            // Update button states
+            const hasPending = pending > 0 || processing > 0;
+            elements.btnStartQueue.disabled = state.isProcessing || state.queue.length === 0;
+            elements.btnStopQueue.disabled = !state.isProcessing;
         }
 
         function formatFileSize(bytes) {
@@ -514,78 +663,277 @@
             return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         }
 
+        function getStatusIcon(status) {
+            switch (status) {
+                case 'pending': return '⏳';
+                case 'processing': return '⚙️';
+                case 'completed': return '✅';
+                case 'error': return '❌';
+                default: return '●';
+            }
+        }
+
+        function logConsole(message, level = 'info') {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-level">[${level}]</span> ${time} - ${message}`;
+            elements.consoleLog.appendChild(entry);
+            elements.consoleLog.scrollTop = elements.consoleLog.scrollHeight;
+        }
+
         // =================================================================
-        // Event Handlers
+        // Job Rendering
         // =================================================================
 
-        // Advanced Settings Toggle
-        elements.advancedToggle.addEventListener('click', () => {
-            const isVisible = elements.advancedSettings.style.display !== 'none';
-            elements.advancedSettings.style.display = isVisible ? 'none' : 'block';
-            elements.advancedToggle.textContent = isVisible ? 'Advanced Settings ▼' : 'Advanced Settings ▲';
-        });
+        function renderJob(job) {
+            const existingItem = document.getElementById(`job-${job.id}`);
 
-        // Select File
-        elements.btnSelectFile.addEventListener('click', async () => {
-            const filePath = await ipcRenderer.invoke('dialog:openFile');
-            if (filePath) {
+            const jobHtml = `
+                <div class="job-status">
+                    ${getStatusIcon(job.status)}
+                </div>
+                <div class="job-info">
+                    <div class="job-name" title="${job.file.name}">${job.file.name}</div>
+                    <div class="job-meta">
+                        ${job.file.type.toUpperCase()} · ${formatFileSize(job.file.size)} · .${job.file.extension}
+                    </div>
+                    <div class="job-progress">
+                        <div class="job-progress-bar" style="width: ${job.progress}%"></div>
+                    </div>
+                    <div class="job-detail">${job.detail}</div>
+                </div>
+                <div class="job-actions">
+                    ${job.status === 'completed' ?
+                        `<button class="job-btn open" title="Open folder" data-job-id="${job.id}" data-action="open">📂</button>` :
+                        ''}
+                    ${job.status === 'pending' || job.status === 'error' || job.status === 'completed' ?
+                        `<button class="job-btn remove" title="Remove" data-job-id="${job.id}" data-action="remove">✕</button>` :
+                        ''}
+                </div>
+            `;
+
+            if (existingItem) {
+                existingItem.className = `job-item ${job.status}`;
+                existingItem.innerHTML = jobHtml;
+            } else {
+                const item = document.createElement('div');
+                item.id = `job-${job.id}`;
+                item.className = `job-item ${job.status}`;
+                item.innerHTML = jobHtml;
+                elements.jobList.appendChild(item);
+            }
+        }
+
+        function renderAllJobs() {
+            elements.jobList.innerHTML = '';
+            state.queue.forEach(job => renderJob(job));
+            updateQueueStats();
+        }
+
+        function updateJob(jobId, updates) {
+            const job = state.queue.find(j => j.id === jobId);
+            if (job) {
+                Object.assign(job, updates);
+                renderJob(job);
+                updateQueueStats();
+            }
+        }
+
+        // =================================================================
+        // File Handling
+        // =================================================================
+
+        async function addFiles(filePaths) {
+            logConsole(`Adding ${filePaths.length} file(s) to queue...`);
+
+            for (const filePath of filePaths) {
                 const info = await ipcRenderer.invoke('file:getInfo', filePath);
+
                 if (info.valid) {
-                    currentFile = info;
-                    elements.fileInfo.style.display = 'block';
-                    elements.fileName.textContent = info.name;
-                    elements.fileMeta.textContent = `${info.type.toUpperCase()} | ${formatFileSize(info.size)} | .${info.extension}`;
-                    elements.btnStart.disabled = false;
-                    log('log', `File selected: ${info.name}`);
+                    const job = createJob(info);
+                    state.queue.push(job);
+                    renderJob(job);
+                    logConsole(`Added: ${info.name}`);
                 } else {
-                    log('error', `Invalid file: ${info.reason}`);
+                    logConsole(`Invalid file: ${path.basename(filePath)} - ${info.reason}`, 'error');
                 }
             }
-        });
 
-        // Start Processing
-        elements.btnStart.addEventListener('click', async () => {
-            if (!currentFile) return;
+            updateQueueStats();
+        }
 
-            setProcessingState(true);
-            setStatus('Starting...', 'running');
-            setProgress(0, 'Initializing');
-
-            const options = {
-                mode: elements.optMode.value,
-                model: elements.optModel.value,
-                quality: elements.optQuality.value,
-                device: elements.optDevice.value,
-                outputFormat: elements.optFormat.value,
-            };
-
-            log('log', 'Starting motor with options', options);
-
-            const result = await ipcRenderer.invoke('motor:start', {
-                inputPath: currentFile.path,
-                outputDir: null, // Use same directory as input
-                options
-            });
-
-            if (!result.success) {
-                log('error', `Failed to start: ${result.error}`);
-                setStatus(`Error: ${result.error}`, 'error');
-                setProcessingState(false);
+        // Drop Zone - Click to browse
+        elements.dropZone.addEventListener('click', async () => {
+            const filePaths = await ipcRenderer.invoke('dialog:openFile');
+            if (filePaths) {
+                // Handle both single file (string) and multiple files (array)
+                const paths = Array.isArray(filePaths) ? filePaths : [filePaths];
+                await addFiles(paths);
             }
         });
 
-        // Cancel Processing
-        elements.btnCancel.addEventListener('click', async () => {
-            log('log', 'Requesting cancellation...');
-            setStatus('Cancelling...', 'running');
-            const result = await ipcRenderer.invoke('motor:cancel');
-            log('log', 'Cancel result', result);
+        // Drop Zone - Drag and drop
+        elements.dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            elements.dropZone.classList.add('drag-over');
         });
 
-        // Open Output Folder
-        elements.btnOpenOutput.addEventListener('click', async () => {
-            if (outputPath) {
-                await ipcRenderer.invoke('shell:openPath', outputPath);
+        elements.dropZone.addEventListener('dragleave', () => {
+            elements.dropZone.classList.remove('drag-over');
+        });
+
+        elements.dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            elements.dropZone.classList.remove('drag-over');
+
+            const files = Array.from(e.dataTransfer.files);
+            const filePaths = files.map(f => f.path);
+
+            if (filePaths.length > 0) {
+                await addFiles(filePaths);
+            }
+        });
+
+        // =================================================================
+        // Queue Processing
+        // =================================================================
+
+        async function processQueue() {
+            if (state.isProcessing) return;
+
+            state.isProcessing = true;
+            updateQueueStats();
+            logConsole('Queue processing started');
+
+            while (true) {
+                // Find next pending job
+                const job = state.queue.find(j => j.status === 'pending');
+
+                if (!job) {
+                    // No more pending jobs
+                    break;
+                }
+
+                // Process this job
+                state.currentJobId = job.id;
+                updateJob(job.id, {
+                    status: 'processing',
+                    detail: 'Initializing...',
+                    progress: 0
+                });
+
+                logConsole(`Processing: ${job.file.name}`);
+
+                try {
+                    // Get global settings
+                    const options = {
+                        mode: elements.optMode.value,
+                        model: elements.optModel.value,
+                        quality: elements.optQuality.value,
+                        device: elements.optDevice.value,
+                        outputFormat: elements.optFormat.value,
+                    };
+
+                    // Start motor
+                    const result = await ipcRenderer.invoke('motor:start', {
+                        inputPath: job.file.path,
+                        outputDir: null, // Use same directory as input
+                        options
+                    });
+
+                    if (!result.success) {
+                        throw new Error(result.error || 'Unknown error');
+                    }
+
+                    // Wait for completion (motor events will update progress)
+                    // The motor will send 'motor:success' or 'motor:error' event
+                    // which will be handled by event listeners below
+
+                    // Wait for job to finish (status changes from 'processing')
+                    await new Promise((resolve) => {
+                        const checkInterval = setInterval(() => {
+                            const currentJob = state.queue.find(j => j.id === job.id);
+                            if (currentJob && currentJob.status !== 'processing') {
+                                clearInterval(checkInterval);
+                                resolve();
+                            }
+                        }, 500);
+                    });
+
+                } catch (error) {
+                    logConsole(`Error processing ${job.file.name}: ${error.message}`, 'error');
+                    updateJob(job.id, {
+                        status: 'error',
+                        detail: `Error: ${error.message}`,
+                        error: error.message,
+                    });
+                }
+
+                state.currentJobId = null;
+
+                // Check if we should stop (user clicked stop button)
+                if (!state.isProcessing) {
+                    break;
+                }
+            }
+
+            state.isProcessing = false;
+            updateQueueStats();
+            logConsole('Queue processing finished');
+        }
+
+        // Start Queue
+        elements.btnStartQueue.addEventListener('click', () => {
+            processQueue();
+        });
+
+        // Stop Queue
+        elements.btnStopQueue.addEventListener('click', async () => {
+            logConsole('Stopping queue...');
+            state.isProcessing = false;
+
+            // Cancel current job
+            if (state.currentJobId) {
+                await ipcRenderer.invoke('motor:cancel');
+            }
+
+            updateQueueStats();
+        });
+
+        // Clear Completed Jobs
+        elements.btnClearCompleted.addEventListener('click', () => {
+            const before = state.queue.length;
+            state.queue = state.queue.filter(j => j.status !== 'completed');
+            const removed = before - state.queue.length;
+
+            if (removed > 0) {
+                logConsole(`Removed ${removed} completed job(s)`);
+                renderAllJobs();
+            }
+        });
+
+        // =================================================================
+        // Job Actions (Remove, Open Folder)
+        // =================================================================
+
+        elements.jobList.addEventListener('click', async (e) => {
+            const button = e.target.closest('.job-btn');
+            if (!button) return;
+
+            const jobId = parseInt(button.dataset.jobId);
+            const action = button.dataset.action;
+            const job = state.queue.find(j => j.id === jobId);
+
+            if (!job) return;
+
+            if (action === 'remove') {
+                const index = state.queue.indexOf(job);
+                state.queue.splice(index, 1);
+                logConsole(`Removed job: ${job.file.name}`);
+                renderAllJobs();
+            } else if (action === 'open' && job.outputPath) {
+                await ipcRenderer.invoke('shell:openPath', job.outputPath);
             }
         });
 
@@ -594,98 +942,107 @@
         // =================================================================
 
         ipcRenderer.on('motor:start', (event, data) => {
-            log('start', `Processing started`, { 
-                model: data.model, 
-                device: data.device,
-                type: data.fileType 
-            });
-            setStatus(`Processing with ${data.model} on ${data.device}`, 'running');
+            if (state.currentJobId) {
+                logConsole(`Motor started for job ${state.currentJobId}: ${data.model} on ${data.device}`);
+            }
         });
 
         ipcRenderer.on('motor:step', (event, data) => {
-            log('step', `Step ${data.stepNumber}/${data.totalSteps}: ${data.step}`);
-            setProgress(
-                (data.stepNumber / data.totalSteps) * 100 * 0.1, // Rough estimate
-                `Step ${data.stepNumber}/${data.totalSteps}: ${data.step}`
-            );
-        });
-
-        ipcRenderer.on('motor:progress', (event, data) => {
-            const globalPercent = data.globalPercent || data.stepPercent || 0;
-            setProgress(globalPercent, data.currentStep || '-');
-            
-            if (data.detail) {
-                setStatus(data.detail, 'running');
-            }
-            
-            // Don't log every progress update (too noisy)
-            if (Math.floor(globalPercent) % 10 === 0) {
-                log('progress', `${Math.round(globalPercent)}%`, { 
-                    step: data.currentStep,
-                    eta: data.etaSeconds 
+            if (state.currentJobId) {
+                updateJob(state.currentJobId, {
+                    detail: `Step ${data.stepNumber}/${data.totalSteps}: ${data.step}`,
                 });
             }
         });
 
-        ipcRenderer.on('motor:raw-progress', (event, data) => {
-            // Fallback progress from raw Demucs output
-            setProgress(data.percent);
+        ipcRenderer.on('motor:progress', (event, data) => {
+            if (state.currentJobId) {
+                const progress = data.stepPercent || data.globalPercent || 0;
+                updateJob(state.currentJobId, {
+                    progress: Math.round(progress),
+                    detail: data.detail || `Processing: ${Math.round(progress)}%`,
+                });
+            }
         });
 
         ipcRenderer.on('motor:log', (event, data) => {
-            log('log', data.message);
+            logConsole(data.message, data.level || 'info');
         });
 
         ipcRenderer.on('motor:warning', (event, data) => {
-            log('log', `⚠️ ${data.message}`, { code: data.code });
+            logConsole(`⚠️ ${data.message}`, 'warn');
         });
 
         ipcRenderer.on('motor:error', (event, data) => {
-            log('error', data.message, { code: data.code, fatal: data.fatal });
-            if (data.fatal) {
-                setStatus(`Error: ${data.message}`, 'error');
-                setProcessingState(false);
+            logConsole(`Error: ${data.message}`, 'error');
+
+            if (data.fatal && state.currentJobId) {
+                updateJob(state.currentJobId, {
+                    status: 'error',
+                    detail: `Error: ${data.message}`,
+                    error: data.message,
+                });
             }
         });
 
         ipcRenderer.on('motor:success', (event, data) => {
-            log('success', 'Processing complete!', { 
-                elapsed: data.elapsedSeconds?.toFixed(1) + 's',
-                stems: Object.keys(data.outputs || {})
-            });
-            
-            setProgress(100, 'Complete');
-            setStatus('✅ Processing complete!', 'success');
-            setProcessingState(false);
-            
-            // Store output path for "Open Folder" button
-            if (data.outputs) {
-                const firstOutput = Object.values(data.outputs)[0];
-                if (firstOutput) {
-                    outputPath = require('path').dirname(firstOutput);
-                    elements.btnOpenOutput.disabled = false;
+            if (state.currentJobId) {
+                logConsole(`Job ${state.currentJobId} completed successfully`);
+
+                // Get output path from first output file
+                let outputPath = null;
+                if (data.outputs) {
+                    const firstOutput = Object.values(data.outputs)[0];
+                    if (firstOutput) {
+                        outputPath = path.dirname(firstOutput);
+                    }
                 }
+
+                updateJob(state.currentJobId, {
+                    status: 'completed',
+                    progress: 100,
+                    detail: `✅ Completed in ${data.elapsedSeconds?.toFixed(1)}s`,
+                    outputPath: outputPath,
+                });
             }
         });
 
         ipcRenderer.on('motor:cancelled', (event, data) => {
-            log('cancelled', `Cancelled: ${data.reason}`, { 
-                elapsed: data.elapsedSeconds?.toFixed(1) + 's',
-                lastStep: data.lastStep 
-            });
-            setStatus('Cancelled by user', 'error');
-            setProgress(0, '-');
-            setProcessingState(false);
+            if (state.currentJobId) {
+                logConsole(`Job ${state.currentJobId} cancelled`);
+                updateJob(state.currentJobId, {
+                    status: 'error',
+                    detail: 'Cancelled by user',
+                    error: 'Cancelled',
+                });
+            }
         });
 
-        ipcRenderer.on('motor:stderr', (event, data) => {
-            log('error', `stderr: ${data}`);
+        // =================================================================
+        // Advanced Settings Toggle
+        // =================================================================
+
+        elements.advancedToggle.addEventListener('click', () => {
+            const arrow = elements.advancedToggle.querySelector('.advanced-arrow');
+            const isOpen = elements.advancedSettings.classList.toggle('open');
+            arrow.classList.toggle('open', isOpen);
+        });
+
+        // =================================================================
+        // Console Toggle
+        // =================================================================
+
+        elements.consoleToggle.addEventListener('click', () => {
+            const isOpen = elements.consoleLog.classList.toggle('open');
+            elements.consoleToggle.textContent = isOpen ? 'Debug Log ▲' : 'Debug Log ▼';
         });
 
         // =================================================================
         // Initialization
         // =================================================================
-        log('log', 'UI initialized, waiting for file selection');
+
+        logConsole('Queue system initialized');
+        updateQueueStats();
     </script>
 </body>
 </html>
