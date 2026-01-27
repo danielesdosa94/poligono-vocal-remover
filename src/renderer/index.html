@@ -745,6 +745,11 @@
         // =================================================================
 
         async function addFiles(filePaths) {
+            if (!Array.isArray(filePaths) || filePaths.length === 0) {
+                logConsole('No files to add', 'error');
+                return;
+            }
+
             logConsole(`Adding ${filePaths.length} file(s) to queue...`);
 
             for (const filePath of filePaths) {
@@ -795,13 +800,10 @@
             e.stopPropagation();
             elements.dropZone.classList.remove('drag-over');
 
-            const files = Array.from(e.dataTransfer.files);
-            const filePaths = files.map(f => f.path);
-
-            if (filePaths.length > 0) {
-                logConsole(`Dropped ${filePaths.length} file(s)`);
-                await addFiles(filePaths);
-            }
+            // Drag & Drop is temporarily disabled due to Electron limitations
+            // Use the Browse button instead for multiple file selection
+            logConsole('Drag & Drop is not currently supported', 'warn');
+            logConsole('Please use the "Browse" button to select multiple files', 'info');
         });
 
         // =================================================================

@@ -498,10 +498,10 @@ ipcMain.handle('shell:showItemInFolder', (event, targetPath) => {
 ipcMain.handle('file:getInfo', (event, filePath) => {
     const fs = require('fs');
     const ext = path.extname(filePath).toLowerCase().slice(1);
-    
+
     const isAudio = CONFIG.supportedAudio.includes(ext);
     const isVideo = CONFIG.supportedVideo.includes(ext);
-    
+
     if (!isAudio && !isVideo) {
         return { valid: false, reason: `Unsupported format: .${ext}` };
     }
