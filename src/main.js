@@ -355,7 +355,7 @@ function createWindow() {
         minHeight: CONFIG.window.minHeight,
         title: 'Polígono Vocal Remover',
         backgroundColor: CONFIG.window.backgroundColor,
-        icon: path.join(__dirname, 'assets', 'logo.png'),
+        icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,

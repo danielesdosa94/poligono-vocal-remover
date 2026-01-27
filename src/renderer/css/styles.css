@@ -94,7 +94,14 @@ body {
 }
 
 .header__logo {
-    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.header__logo img {
+    height: 32px;
+    width: auto;
 }
 
 .header__content {
@@ -133,6 +140,7 @@ body {
     flex-direction: column;
     overflow-y: auto;
     overflow-x: hidden;
+    max-height: calc(100vh - 80px); /* 80px para el header */
 }
 
 .panel-control::-webkit-scrollbar {
@@ -228,6 +236,13 @@ body {
     font-size: 48px;
     margin-bottom: var(--spacing-sm);
     position: relative;
+    color: var(--color-text-secondary);
+    transition: color var(--transition-base);
+}
+
+.drop-zone:hover .drop-zone__icon,
+.drop-zone.drag-over .drop-zone__icon {
+    color: var(--color-primary);
 }
 
 .drop-zone__text {
@@ -329,16 +344,22 @@ body {
     background: var(--color-primary);
     color: white;
     box-shadow: var(--shadow-sm);
+    font-size: 16px;
+    font-weight: 700;
+    padding: 18px 24px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .btn-primary:hover:not(:disabled) {
     background: var(--color-primary-hover);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
 }
 
 .btn-primary:active:not(:disabled) {
     transform: translateY(0);
+    box-shadow: var(--shadow-md);
 }
 
 .btn-secondary {
@@ -616,13 +637,17 @@ body {
 
 .job-progress-bar {
     height: 100%;
-    background: var(--color-primary);
+    background: var(--color-primary); /* Rojo Polígono durante procesamiento */
     width: 0%;
     transition: width 0.4s ease;
 }
 
+.job-item.processing .job-progress-bar {
+    background: var(--color-primary); /* Rojo durante procesamiento */
+}
+
 .job-item.completed .job-progress-bar {
-    background: var(--color-success);
+    background: var(--color-success); /* Verde al completar */
     width: 100%;
 }
 

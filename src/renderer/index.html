@@ -9,10 +9,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <header class="header">
-        <div class="header__logo">🎵</div>
+        <div class="header__logo">
+            <img src="../assets/logo.png" alt="Polígono Studio" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <span style="display:none; font-size: 24px;">🎵</span>
+        </div>
         <div class="header__content">
             <div class="header__title">Polígono Vocal Remover</div>
             <div class="header__subtitle">AI-Powered Audio Separation · Batch Processing</div>
@@ -26,7 +30,9 @@
             <div class="section">
                 <div class="section__title">Add Files</div>
                 <div id="drop-zone" class="drop-zone">
-                    <div class="drop-zone__icon">🎵</div>
+                    <div class="drop-zone__icon">
+                        <i class="fas fa-file-audio"></i>
+                    </div>
                     <div class="drop-zone__text">Drop Audio or Video Files</div>
                     <div class="drop-zone__hint">Or click to browse (supports multiple files)</div>
                 </div>
@@ -96,16 +102,16 @@
                 <div class="section__title">Queue Actions</div>
 
                 <button id="btn-start-queue" class="btn btn-primary" disabled>
-                    ▶️ Start Queue
+                    <i class="fas fa-play"></i> Start Queue
                 </button>
 
                 <div class="btn-group mt-sm">
                     <button id="btn-stop-queue" class="btn btn-secondary" disabled>
-                        ⏹️ Stop
+                        <i class="fas fa-stop"></i> Stop
                     </button>
 
                     <button id="btn-clear-completed" class="btn btn-secondary">
-                        🗑️ Clear
+                        <i class="fas fa-trash"></i> Clear
                     </button>
                 </div>
             </div>
