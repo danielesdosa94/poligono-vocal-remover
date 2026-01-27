@@ -1,0 +1,776 @@
+/**
+ * Polígono Vocal Remover - Professional Dark Theme
+ * Design System v1.0
+ */
+
+/* ============================================================================
+   Design Tokens
+   ========================================================================= */
+
+:root {
+    /* Colors - Polígono Studio Brand */
+    --color-bg: #141414;
+    --color-surface: #1F1F1F;
+    --color-surface-hover: #252525;
+    --color-border: #2a2a2a;
+    --color-border-light: #333333;
+
+    /* Brand Colors */
+    --color-primary: #D9052E;
+    --color-primary-hover: #ff1c45;
+    --color-primary-dim: rgba(217, 5, 46, 0.1);
+
+    /* Semantic Colors */
+    --color-success: #00c853;
+    --color-warning: #ffa726;
+    --color-error: #f44336;
+    --color-info: #2196f3;
+
+    /* Text */
+    --color-text: #F1F1F1;
+    --color-text-secondary: #A0A0A0;
+    --color-text-muted: #666666;
+
+    /* Status Colors */
+    --color-pending: #616161;
+    --color-processing: #2196f3;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Border Radius */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+
+    /* Shadows */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.4);
+
+    /* Transitions */
+    --transition-fast: 150ms ease;
+    --transition-base: 250ms ease;
+    --transition-slow: 350ms ease;
+}
+
+/* ============================================================================
+   Base Styles
+   ========================================================================= */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================================
+   Header
+   ========================================================================= */
+
+.header {
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--spacing-lg) var(--spacing-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.header__logo {
+    font-size: 24px;
+}
+
+.header__content {
+    flex: 1;
+}
+
+.header__title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 2px;
+}
+
+.header__subtitle {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-weight: 400;
+}
+
+/* ============================================================================
+   Main Layout - Split View
+   ========================================================================= */
+
+.main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Left Panel - Control Panel (35%) */
+.panel-control {
+    width: 420px;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.panel-control::-webkit-scrollbar {
+    width: 8px;
+}
+
+.panel-control::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+.panel-control::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+.panel-control::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-light);
+}
+
+/* Right Panel - Job Queue (65%) */
+.panel-queue {
+    flex: 1;
+    background: var(--color-bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ============================================================================
+   Control Panel Sections
+   ========================================================================= */
+
+.section {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.section:last-child {
+    border-bottom: none;
+}
+
+.section__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-md);
+}
+
+/* ============================================================================
+   Drop Zone
+   ========================================================================= */
+
+.drop-zone {
+    border: 2px dashed var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-xl);
+    text-align: center;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    background: var(--color-bg);
+    position: relative;
+    overflow: hidden;
+}
+
+.drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--color-primary-dim);
+    opacity: 0;
+    transition: opacity var(--transition-base);
+}
+
+.drop-zone:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-dim);
+}
+
+.drop-zone:hover::before {
+    opacity: 1;
+}
+
+.drop-zone.drag-over {
+    border-color: var(--color-primary);
+    background: var(--color-primary-dim);
+    transform: scale(1.02);
+    box-shadow: 0 0 0 4px rgba(217, 5, 46, 0.15);
+}
+
+.drop-zone__icon {
+    font-size: 48px;
+    margin-bottom: var(--spacing-sm);
+    position: relative;
+}
+
+.drop-zone__text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-xs);
+    position: relative;
+}
+
+.drop-zone__hint {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    position: relative;
+}
+
+/* ============================================================================
+   Form Controls - Custom Styled Selects
+   ========================================================================= */
+
+.form-group {
+    margin-bottom: var(--spacing-md);
+}
+
+.form-group:last-child {
+    margin-bottom: 0;
+}
+
+.form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.form-select {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23A0A0A0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+}
+
+.form-select:hover {
+    border-color: var(--color-border-light);
+    background-color: var(--color-surface);
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-dim);
+}
+
+.form-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================================================
+   Buttons
+   ========================================================================= */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    padding: 14px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-transform: none;
+    letter-spacing: 0.3px;
+    width: 100%;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-primary {
+    background: var(--color-primary);
+    color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border-light);
+}
+
+/* Button Group */
+.btn-group {
+    display: flex;
+    gap: var(--spacing-sm);
+}
+
+.btn-group .btn {
+    flex: 1;
+}
+
+/* ============================================================================
+   Advanced Settings - Collapsible
+   ========================================================================= */
+
+.collapsible {
+    margin-top: var(--spacing-md);
+}
+
+.collapsible__trigger {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    width: 100%;
+    padding: var(--spacing-md);
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+    margin: 0 calc(var(--spacing-xl) * -1);
+}
+
+.collapsible__trigger:hover {
+    color: var(--color-primary);
+}
+
+.collapsible__icon {
+    font-size: 10px;
+    transition: transform var(--transition-base);
+}
+
+.collapsible__icon.open {
+    transform: rotate(90deg);
+}
+
+.collapsible__content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--transition-slow);
+}
+
+.collapsible__content.open {
+    max-height: 400px;
+}
+
+/* ============================================================================
+   Queue Header
+   ========================================================================= */
+
+.queue-header {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.queue-header__title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-xs);
+}
+
+.queue-stats {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+/* ============================================================================
+   Job List
+   ========================================================================= */
+
+.job-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--spacing-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.job-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.job-list::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+.job-list::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+.job-list::-webkit-scrollbar-thumb:hover {
+    background: var(--color-border-light);
+}
+
+/* Empty State */
+.job-list:empty::before {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='60' cy='60' r='50' stroke='%232a2a2a' stroke-width='2' stroke-dasharray='8 8'/%3E%3Cpath d='M60 35V60L75 75' stroke='%232a2a2a' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center center;
+    opacity: 0.3;
+}
+
+.job-list:empty::after {
+    content: 'No files in queue\AAdd files using the drop zone or browse button';
+    white-space: pre-line;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 14px;
+    line-height: 1.6;
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+}
+
+/* ============================================================================
+   Job Item
+   ========================================================================= */
+
+.job-item {
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md) var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    border-left: 3px solid var(--color-pending);
+    transition: all var(--transition-base);
+    animation: slideIn var(--transition-base) ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.job-item:hover {
+    background: var(--color-surface-hover);
+}
+
+.job-item.pending {
+    border-left-color: var(--color-pending);
+}
+
+.job-item.processing {
+    border-left-color: var(--color-processing);
+    background: rgba(33, 150, 243, 0.05);
+}
+
+.job-item.completed {
+    border-left-color: var(--color-success);
+}
+
+.job-item.error {
+    border-left-color: var(--color-error);
+}
+
+/* Job Status Icon */
+.job-status {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    background: var(--color-bg);
+}
+
+.job-item.pending .job-status {
+    color: var(--color-pending);
+}
+
+.job-item.processing .job-status {
+    color: var(--color-processing);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(0.95);
+    }
+}
+
+.job-item.completed .job-status {
+    color: var(--color-success);
+}
+
+.job-item.error .job-status {
+    color: var(--color-error);
+}
+
+/* Job Info */
+.job-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.job-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.job-meta {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Job Progress Bar */
+.job-progress {
+    height: 3px;
+    background: var(--color-bg);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+}
+
+.job-progress-bar {
+    height: 100%;
+    background: var(--color-primary);
+    width: 0%;
+    transition: width 0.4s ease;
+}
+
+.job-item.completed .job-progress-bar {
+    background: var(--color-success);
+    width: 100%;
+}
+
+.job-item.error .job-progress-bar {
+    background: var(--color-error);
+}
+
+.job-detail {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+/* Job Actions */
+.job-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+}
+
+.job-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all var(--transition-fast);
+}
+
+.job-btn:hover {
+    background: var(--color-border);
+    color: var(--color-text);
+    transform: scale(1.05);
+}
+
+.job-btn.remove:hover {
+    background: var(--color-error);
+    color: white;
+}
+
+.job-btn.open:hover {
+    background: var(--color-success);
+    color: white;
+}
+
+.job-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================================================
+   Console Log
+   ========================================================================= */
+
+.console-section {
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.console-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md) var(--spacing-xl);
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast);
+}
+
+.console-toggle:hover {
+    background: var(--color-surface-hover);
+}
+
+.console-toggle__text {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--color-text-secondary);
+}
+
+.console-log {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--transition-slow);
+    background: #0a0a0a;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.console-log.open {
+    max-height: 250px;
+    overflow-y: auto;
+    padding: var(--spacing-md) var(--spacing-xl);
+}
+
+.console-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+.console-log::-webkit-scrollbar-track {
+    background: #000;
+}
+
+.console-log::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+.log-entry {
+    padding: 2px 0;
+    color: var(--color-text-muted);
+}
+
+.log-entry .log-level {
+    color: var(--color-primary);
+    margin-right: 8px;
+    font-weight: 600;
+}
+
+/* ============================================================================
+   Utility Classes
+   ========================================================================= */
+
+.hidden {
+    display: none !important;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-muted {
+    color: var(--color-text-muted);
+}
+
+.mt-sm { margin-top: var(--spacing-sm); }
+.mt-md { margin-top: var(--spacing-md); }
+.mt-lg { margin-top: var(--spacing-lg); }
+
+.mb-sm { margin-bottom: var(--spacing-sm); }
+.mb-md { margin-bottom: var(--spacing-md); }
+.mb-lg { margin-bottom: var(--spacing-lg); }
