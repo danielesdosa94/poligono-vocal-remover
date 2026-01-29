@@ -224,12 +224,16 @@
 
         // Job states: 'pending', 'processing', 'completed', 'error'
         function createJob(fileInfo) {
+            // If queue is running, new files enter as 'Waiting...'
+            // If queue is stopped, they enter as 'Ready'
+            const detail = state.isProcessing ? 'Waiting...' : 'Ready';
+
             return {
                 id: state.nextJobId++,
                 file: fileInfo,
                 status: 'pending',
                 progress: 0,
-                detail: 'Ready',
+                detail: detail,
                 error: null,
                 outputPath: null,
             };
@@ -291,9 +295,11 @@
             return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         }
 
-        function getStatusIcon(status) {
+        function getStatusIcon(status, detail) {
             switch (status) {
-                case 'pending': return '○';
+                case 'pending':
+                    // Show circle for 'Ready', hourglass for 'Waiting...'
+                    return detail === 'Ready' ? '○' : '⏳';
                 case 'processing': return '⚙️';
                 case 'completed': return '✅';
                 case 'error': return '❌';
@@ -319,7 +325,7 @@
 
             const jobHtml = `
                 <div class="job-status">
-                    ${getStatusIcon(job.status)}
+                    ${getStatusIcon(job.status, job.detail)}
                 </div>
                 <div class="job-info">
                     <div class="job-name" title="${job.file.name}">${job.file.name}</div>
@@ -529,6 +535,14 @@
 
         // Start Queue
         elements.btnStartQueue.addEventListener('click', () => {
+            // Change all pending jobs from 'Ready' to 'Waiting...'
+            state.queue.forEach(job => {
+                if (job.status === 'pending' && job.detail === 'Ready') {
+                    job.detail = 'Waiting...';
+                    renderJob(job);
+                }
+            });
+
             processQueue();
         });
 
@@ -541,6 +555,14 @@
             if (state.currentJobId) {
                 await ipcRenderer.invoke('motor:cancel');
             }
+
+            // Change all pending jobs from 'Waiting...' back to 'Ready'
+            state.queue.forEach(job => {
+                if (job.status === 'pending' && job.detail === 'Waiting...') {
+                    job.detail = 'Ready';
+                    renderJob(job);
+                }
+            });
 
             updateQueueStats();
         });
@@ -601,10 +623,13 @@
 
         ipcRenderer.on('motor:progress', (event, data) => {
             if (state.currentJobId) {
-                const progress = data.stepPercent || data.globalPercent || 0;
+                const rawProgress = data.stepPercent || data.globalPercent || 0;
+                // Scale to 90% (AI processing phase)
+                const scaledProgress = Math.round(rawProgress * 0.9);
+
                 updateJob(state.currentJobId, {
-                    progress: Math.round(progress),
-                    detail: data.detail || `Processing: ${Math.round(progress)}%`,
+                    progress: scaledProgress,
+                    detail: `Processing AI: ${scaledProgress}%`,
                 });
             }
         });
@@ -642,6 +667,7 @@
                     }
                 }
 
+                // Force progress to 100% when files are saved
                 updateJob(state.currentJobId, {
                     status: 'completed',
                     progress: 100,
