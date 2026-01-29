@@ -229,7 +229,7 @@
                 file: fileInfo,
                 status: 'pending',
                 progress: 0,
-                detail: 'Waiting...',
+                detail: 'Ready',
                 error: null,
                 outputPath: null,
             };
@@ -293,7 +293,7 @@
 
         function getStatusIcon(status) {
             switch (status) {
-                case 'pending': return '⏳';
+                case 'pending': return '○';
                 case 'processing': return '⚙️';
                 case 'completed': return '✅';
                 case 'error': return '❌';
