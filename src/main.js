@@ -20,10 +20,10 @@ const readline = require('readline');
 
 const CONFIG = {
     window: {
-        width: 1000,
-        height: 750,
-        minWidth: 800,
-        minHeight: 600,
+        width: 1280,
+        height: 800,
+        minWidth: 1000,
+        minHeight: 700,
         backgroundColor: '#141414',
     },
     supportedAudio: ['mp3', 'wav', 'flac', 'm4a', 'ogg', 'wma', 'aac'],
@@ -373,6 +373,7 @@ function createWindow() {
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {
+        mainWindow.maximize(); // Maximizar al arrancar
         mainWindow.show();
     });
 

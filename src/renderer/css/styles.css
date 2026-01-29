@@ -1,6 +1,6 @@
 /**
- * Polígono Vocal Remover - Professional Dark Theme
- * Design System v1.0
+ * Polígono AI Hub - Single View Application
+ * Design System v2.0 - Grid Layout
  */
 
 /* ============================================================================
@@ -10,6 +10,7 @@
 :root {
     /* Colors - Polígono Studio Brand */
     --color-bg: #141414;
+    --color-panel: #1A1A1A;
     --color-surface: #1F1F1F;
     --color-surface-hover: #252525;
     --color-border: #2a2a2a;
@@ -56,6 +57,10 @@
     --transition-fast: 150ms ease;
     --transition-base: 250ms ease;
     --transition-slow: 350ms ease;
+
+    /* Layout Sizes */
+    --header-height: 80px;
+    --panel-width: 320px;
 }
 
 /* ============================================================================
@@ -72,157 +77,172 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     background: var(--color-bg);
     color: var(--color-text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
+    height: 100vh;
+    overflow: hidden; /* CRÍTICO: Sin scroll en body */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
 /* ============================================================================
-   Header
+   Grid Layout - Single View
+   ========================================================================= */
+
+.app-container {
+    display: grid;
+    grid-template-rows: var(--header-height) 1fr;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ============================================================================
+   Header - Top Bar
    ========================================================================= */
 
 .header {
-    background: var(--color-surface);
+    background: var(--color-panel);
     border-bottom: 1px solid var(--color-border);
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
     padding: var(--spacing-lg) var(--spacing-xl);
+    height: var(--header-height);
+}
+
+/* Logo Central */
+.header__brand {
+    grid-column: 2;
     display: flex;
     align-items: center;
     gap: var(--spacing-md);
-}
-
-.header__logo {
-    display: flex;
-    align-items: center;
     justify-content: center;
 }
 
-.header__logo img {
-    height: 32px;
+.header__logo {
+    height: 48px;
     width: auto;
 }
 
-.header__content {
-    flex: 1;
+.header__logo-fallback {
+    font-size: 36px;
+    display: none;
 }
 
 .header__title {
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: 700;
     color: var(--color-text);
-    margin-bottom: 2px;
+    letter-spacing: -0.5px;
 }
 
-.header__subtitle {
-    font-size: 13px;
+/* Navegación - Pestañas */
+.header__nav {
+    grid-column: 3;
+    display: flex;
+    gap: var(--spacing-sm);
+    justify-content: flex-end;
+}
+
+.nav-tab {
+    padding: var(--spacing-md) var(--spacing-lg);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
     color: var(--color-text-secondary);
-    font-weight: 400;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-transform: none;
+}
+
+.nav-tab:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-tab.active {
+    color: var(--color-text);
+    border-bottom-color: var(--color-primary);
 }
 
 /* ============================================================================
-   Main Layout - Split View
+   Main Content - Two Column Grid
    ========================================================================= */
 
 .main {
-    flex: 1;
-    display: flex;
-    overflow: hidden;
-}
-
-/* Left Panel - Control Panel (35%) */
-.panel-control {
-    width: 420px;
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
-    max-height: calc(100vh - 80px); /* 80px para el header */
-}
-
-.panel-control::-webkit-scrollbar {
-    width: 8px;
-}
-
-.panel-control::-webkit-scrollbar-track {
-    background: var(--color-bg);
-}
-
-.panel-control::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 4px;
-}
-
-.panel-control::-webkit-scrollbar-thumb:hover {
-    background: var(--color-border-light);
-}
-
-/* Right Panel - Job Queue (65%) */
-.panel-queue {
-    flex: 1;
-    background: var(--color-bg);
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: var(--panel-width) 1fr;
+    height: calc(100vh - var(--header-height));
     overflow: hidden;
 }
 
 /* ============================================================================
-   Control Panel Sections
+   Control Panel - Left Column (320px)
    ========================================================================= */
 
-.section {
-    padding: var(--spacing-lg) var(--spacing-xl);
+.panel-control {
+    background: var(--color-panel);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.control-section {
+    padding: var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
 }
 
-.section:last-child {
+.control-section--scrollable {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.control-section--scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+
+.control-section--scrollable::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+.control-section--scrollable::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+.control-section--actions {
+    margin-top: auto; /* Empuja los botones al fondo */
     border-bottom: none;
 }
 
 .section__title {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--color-text-secondary);
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted);
     margin-bottom: var(--spacing-md);
 }
 
 /* ============================================================================
-   Drop Zone
+   Drop Zone - Compacta
    ========================================================================= */
 
 .drop-zone {
     border: 2px dashed var(--color-border);
     border-radius: var(--radius-md);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-lg);
     text-align: center;
     cursor: pointer;
     transition: all var(--transition-base);
     background: var(--color-bg);
-    position: relative;
-    overflow: hidden;
-}
-
-.drop-zone::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--color-primary-dim);
-    opacity: 0;
-    transition: opacity var(--transition-base);
 }
 
 .drop-zone:hover {
     border-color: var(--color-primary);
     background: var(--color-primary-dim);
-}
-
-.drop-zone:hover::before {
-    opacity: 1;
 }
 
 .drop-zone.drag-over {
@@ -233,9 +253,8 @@ body {
 }
 
 .drop-zone__icon {
-    font-size: 48px;
-    margin-bottom: var(--spacing-sm);
-    position: relative;
+    font-size: 32px;
+    margin-bottom: var(--spacing-xs);
     color: var(--color-text-secondary);
     transition: color var(--transition-base);
 }
@@ -246,21 +265,19 @@ body {
 }
 
 .drop-zone__text {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--color-text);
-    margin-bottom: var(--spacing-xs);
-    position: relative;
+    margin-bottom: 2px;
 }
 
 .drop-zone__hint {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--color-text-secondary);
-    position: relative;
 }
 
 /* ============================================================================
-   Form Controls - Custom Styled Selects
+   Form Controls - Compact
    ========================================================================= */
 
 .form-group {
@@ -273,28 +290,30 @@ body {
 
 .form-label {
     display: block;
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-sm);
+    margin-bottom: var(--spacing-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .form-select {
     width: 100%;
-    padding: 12px 16px;
+    padding: 10px 12px;
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     color: var(--color-text);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     transition: all var(--transition-fast);
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23A0A0A0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 16px center;
-    padding-right: 40px;
+    background-position: right 12px center;
+    padding-right: 36px;
 }
 
 .form-select:hover {
@@ -308,13 +327,8 @@ body {
     box-shadow: 0 0 0 3px var(--color-primary-dim);
 }
 
-.form-select:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 /* ============================================================================
-   Buttons
+   Buttons - Action Area
    ========================================================================= */
 
 .btn {
@@ -322,15 +336,13 @@ body {
     align-items: center;
     justify-content: center;
     gap: var(--spacing-sm);
-    padding: 14px 24px;
+    padding: 12px 20px;
     font-size: 14px;
     font-weight: 600;
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
     transition: all var(--transition-fast);
-    text-transform: none;
-    letter-spacing: 0.3px;
     width: 100%;
 }
 
@@ -340,15 +352,17 @@ body {
     transform: none !important;
 }
 
+/* START QUEUE - Botón Hero Gigante */
 .btn-primary {
     background: var(--color-primary);
     color: white;
-    box-shadow: var(--shadow-sm);
-    font-size: 16px;
+    box-shadow: var(--shadow-md);
+    font-size: 18px;
     font-weight: 700;
-    padding: 18px 24px;
+    padding: 20px 24px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    margin-bottom: var(--spacing-md);
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -366,6 +380,8 @@ body {
     background: transparent;
     color: var(--color-text-secondary);
     border: 1px solid var(--color-border);
+    font-size: 12px;
+    padding: 10px 16px;
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -374,7 +390,6 @@ body {
     border-color: var(--color-border-light);
 }
 
-/* Button Group */
 .btn-group {
     display: flex;
     gap: var(--spacing-sm);
@@ -385,70 +400,28 @@ body {
 }
 
 /* ============================================================================
-   Advanced Settings - Collapsible
+   Queue Panel - Right Column (Auto Width)
    ========================================================================= */
 
-.collapsible {
-    margin-top: var(--spacing-md);
-}
-
-.collapsible__trigger {
+.panel-queue {
+    background: var(--color-bg);
     display: flex;
-    align-items: center;
-    gap: var(--spacing-sm);
-    width: 100%;
-    padding: var(--spacing-md);
-    background: transparent;
-    border: none;
-    color: var(--color-text-secondary);
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    cursor: pointer;
-    transition: color var(--transition-fast);
-    margin: 0 calc(var(--spacing-xl) * -1);
-}
-
-.collapsible__trigger:hover {
-    color: var(--color-primary);
-}
-
-.collapsible__icon {
-    font-size: 10px;
-    transition: transform var(--transition-base);
-}
-
-.collapsible__icon.open {
-    transform: rotate(90deg);
-}
-
-.collapsible__content {
-    max-height: 0;
+    flex-direction: column;
     overflow: hidden;
-    transition: max-height var(--transition-slow);
 }
-
-.collapsible__content.open {
-    max-height: 400px;
-}
-
-/* ============================================================================
-   Queue Header
-   ========================================================================= */
 
 .queue-header {
     padding: var(--spacing-lg) var(--spacing-xl);
     border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: var(--color-panel);
 }
 
 .queue-header__title {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--color-text-secondary);
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted);
     margin-bottom: var(--spacing-xs);
 }
 
@@ -459,12 +432,12 @@ body {
 }
 
 /* ============================================================================
-   Job List
+   Job List - Scroll Interno
    ========================================================================= */
 
 .job-list {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto; /* SCROLL INTERNO AQUÍ */
     overflow-x: hidden;
     padding: var(--spacing-lg);
     display: flex;
@@ -494,7 +467,7 @@ body {
     content: '';
     display: block;
     width: 100%;
-    height: 100%;
+    height: 200px;
     background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='60' cy='60' r='50' stroke='%232a2a2a' stroke-width='2' stroke-dasharray='8 8'/%3E%3Cpath d='M60 35V60L75 75' stroke='%232a2a2a' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center center;
@@ -502,17 +475,13 @@ body {
 }
 
 .job-list:empty::after {
-    content: 'No files in queue\AAdd files using the drop zone or browse button';
+    content: 'No files in queue\AAdd files using the drop zone';
     white-space: pre-line;
     text-align: center;
     color: var(--color-text-muted);
     font-size: 14px;
     line-height: 1.6;
-    position: absolute;
-    top: 60%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
+    margin-top: -100px;
 }
 
 /* ============================================================================
@@ -520,7 +489,7 @@ body {
    ========================================================================= */
 
 .job-item {
-    background: var(--color-surface);
+    background: var(--color-panel);
     border-radius: var(--radius-md);
     padding: var(--spacing-md) var(--spacing-lg);
     display: flex;
@@ -551,8 +520,8 @@ body {
 }
 
 .job-item.processing {
-    border-left-color: var(--color-processing);
-    background: rgba(33, 150, 243, 0.05);
+    border-left-color: var(--color-primary);
+    background: rgba(217, 5, 46, 0.05);
 }
 
 .job-item.completed {
@@ -581,7 +550,7 @@ body {
 }
 
 .job-item.processing .job-status {
-    color: var(--color-processing);
+    color: var(--color-primary);
     animation: pulse 2s ease-in-out infinite;
 }
 
@@ -637,17 +606,17 @@ body {
 
 .job-progress-bar {
     height: 100%;
-    background: var(--color-primary); /* Rojo Polígono durante procesamiento */
+    background: var(--color-primary); /* Rojo durante procesamiento */
     width: 0%;
     transition: width 0.4s ease;
 }
 
 .job-item.processing .job-progress-bar {
-    background: var(--color-primary); /* Rojo durante procesamiento */
+    background: var(--color-primary);
 }
 
 .job-item.completed .job-progress-bar {
-    background: var(--color-success); /* Verde al completar */
+    background: var(--color-success);
     width: 100%;
 }
 
@@ -706,50 +675,55 @@ body {
 }
 
 /* ============================================================================
-   Console Log
+   Debug Log - Details Element (Colapsado por defecto)
    ========================================================================= */
 
-.console-section {
+.console-details {
     border-top: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: var(--color-panel);
 }
 
-.console-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.console-details summary {
     padding: var(--spacing-md) var(--spacing-xl);
     cursor: pointer;
     user-select: none;
+    list-style: none;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--color-text-muted);
     transition: background var(--transition-fast);
 }
 
-.console-toggle:hover {
+.console-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.console-details summary::before {
+    content: '▼';
+    display: inline-block;
+    margin-right: var(--spacing-sm);
+    transition: transform var(--transition-base);
+    font-size: 8px;
+}
+
+.console-details[open] summary::before {
+    transform: rotate(-90deg);
+}
+
+.console-details summary:hover {
     background: var(--color-surface-hover);
 }
 
-.console-toggle__text {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--color-text-secondary);
-}
-
 .console-log {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height var(--transition-slow);
+    max-height: 200px;
+    overflow-y: auto;
     background: #0a0a0a;
+    padding: var(--spacing-md) var(--spacing-xl);
     font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
     font-size: 11px;
     line-height: 1.5;
-}
-
-.console-log.open {
-    max-height: 250px;
-    overflow-y: auto;
-    padding: var(--spacing-md) var(--spacing-xl);
 }
 
 .console-log::-webkit-scrollbar {
@@ -780,6 +754,79 @@ body {
    Utility Classes
    ========================================================================= */
 
+/* ============================================================================
+   Settings Panel - Full Area
+   ========================================================================= */
+
+.settings-panel {
+    padding: var(--spacing-xl);
+    overflow-y: auto;
+    display: none; /* Hidden by default */
+}
+
+.settings-panel.active {
+    display: block;
+}
+
+.settings-panel__title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-md);
+}
+
+.settings-panel__subtitle {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-xl);
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    max-width: 1000px;
+}
+
+.settings-card {
+    background: var(--color-panel);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-lg);
+}
+
+.settings-card__title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.settings-card__title i {
+    color: var(--color-primary);
+}
+
+/* ============================================================================
+   View System - Tabs Control
+   ========================================================================= */
+
+.view {
+    display: none;
+}
+
+.view.active {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* ============================================================================
+   Utility Classes
+   ========================================================================= */
+
 .hidden {
     display: none !important;
 }
@@ -791,11 +838,3 @@ body {
 .text-muted {
     color: var(--color-text-muted);
 }
-
-.mt-sm { margin-top: var(--spacing-sm); }
-.mt-md { margin-top: var(--spacing-md); }
-.mt-lg { margin-top: var(--spacing-lg); }
-
-.mb-sm { margin-bottom: var(--spacing-sm); }
-.mb-md { margin-bottom: var(--spacing-md); }
-.mb-lg { margin-bottom: var(--spacing-lg); }

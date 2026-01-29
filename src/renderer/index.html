@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
-    <title>Polígono Vocal Remover</title>
+    <title>Polígono AI Hub</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,138 +12,196 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <header class="header">
-        <div class="header__logo">
-            <img src="../assets/logo.png" alt="Polígono Studio" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            <span style="display:none; font-size: 24px;">🎵</span>
-        </div>
-        <div class="header__content">
-            <div class="header__title">Polígono Vocal Remover</div>
-            <div class="header__subtitle">AI-Powered Audio Separation · Batch Processing</div>
-        </div>
-    </header>
+    <div class="app-container">
+        <!-- Header - Top Bar -->
+        <header class="header">
+            <!-- Espacio izquierdo vacío para grid -->
+            <div></div>
 
-    <main class="main">
-        <!-- Control Panel -->
-        <aside class="panel-control">
-            <!-- Add Files Section -->
-            <div class="section">
-                <div class="section__title">Add Files</div>
-                <div id="drop-zone" class="drop-zone">
-                    <div class="drop-zone__icon">
-                        <i class="fas fa-file-audio"></i>
-                    </div>
-                    <div class="drop-zone__text">Drop Audio or Video Files</div>
-                    <div class="drop-zone__hint">Or click to browse (supports multiple files)</div>
-                </div>
+            <!-- Logo y Título Central -->
+            <div class="header__brand">
+                <img
+                    src="../assets/logo.png"
+                    alt="Polígono AI"
+                    class="header__logo"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <span class="header__logo-fallback">🎵</span>
+                <h1 class="header__title">POLÍGONO AI</h1>
             </div>
 
-            <!-- Global Settings Section -->
-            <div class="section">
-                <div class="section__title">Global Settings</div>
+            <!-- Navegación - Pestañas -->
+            <nav class="header__nav">
+                <button class="nav-tab active">Vocal Remover</button>
+                <button class="nav-tab">Stem Splitter</button>
+                <button class="nav-tab">Settings</button>
+            </nav>
+        </header>
 
-                <div class="form-group">
-                    <label class="form-label">Processing Mode</label>
-                    <select id="opt-mode" class="form-select">
-                        <option value="vocal_remover">Vocal Remover (2 Tracks)</option>
-                        <option value="splitter">Stem Splitter (4 Tracks)</option>
-                    </select>
+        <!-- Main Content - Two Column Grid -->
+        <main class="main">
+            <!-- Control Panel - Left Column (320px) -->
+            <aside class="panel-control">
+                <!-- Drop Zone -->
+                <div class="control-section">
+                    <div class="section__title">Add Files</div>
+                    <div id="drop-zone" class="drop-zone">
+                        <div class="drop-zone__icon">
+                            <i class="fas fa-file-audio"></i>
+                        </div>
+                        <div class="drop-zone__text">Drop Files Here</div>
+                        <div class="drop-zone__hint">or click to browse</div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label class="form-label">Device</label>
-                    <select id="opt-device" class="form-select">
-                        <option value="auto">Auto-detect</option>
+                <!-- Simple Settings (Only Output Format) -->
+                <div class="control-section control-section--scrollable">
+                    <div class="section__title">Output Settings</div>
+
+                    <div class="form-group">
+                        <label class="form-label">Output Format</label>
+                        <select id="opt-format" class="form-select">
+                            <option value="wav">WAV (Lossless)</option>
+                            <option value="flac">FLAC</option>
+                            <option value="mp3">MP3</option>
+                        </select>
+                    </div>
+
+                    <!-- Hidden controls for advanced settings -->
+                    <select id="opt-model" class="form-select hidden">
+                        <option value="htdemucs_ft" selected>Demucs v4 FT (Best)</option>
+                        <option value="htdemucs">Demucs v4 Standard</option>
+                        <option value="mdx_extra">MDX-Net (Fast)</option>
+                    </select>
+
+                    <select id="opt-device" class="form-select hidden">
+                        <option value="auto" selected>Auto-detect</option>
                         <option value="cuda">GPU (CUDA)</option>
                         <option value="cpu">CPU Only</option>
                     </select>
-                </div>
 
-                <div class="form-group">
-                    <label class="form-label">Output Format</label>
-                    <select id="opt-format" class="form-select">
-                        <option value="wav">WAV (Lossless)</option>
-                        <option value="flac">FLAC (Compressed Lossless)</option>
-                        <option value="mp3">MP3 (Lossy)</option>
+                    <select id="opt-quality" class="form-select hidden">
+                        <option value="fast">Fast (1 shift)</option>
+                        <option value="hq" selected>High (2 shifts)</option>
+                        <option value="ultra">Ultra (5 shifts)</option>
+                    </select>
+
+                    <select id="opt-mode" class="form-select hidden">
+                        <option value="vocal_remover" selected>Vocal Remover</option>
+                        <option value="splitter">Stem Splitter</option>
                     </select>
                 </div>
 
-                <!-- Advanced Settings -->
-                <div class="collapsible">
-                    <button class="collapsible__trigger" id="advanced-toggle">
-                        <span class="collapsible__icon">▶</span>
-                        <span>Advanced Settings</span>
+                <!-- Action Buttons (Anclados al fondo) -->
+                <div class="control-section control-section--actions">
+                    <button id="btn-start-queue" class="btn btn-primary" disabled>
+                        <i class="fas fa-play"></i> Start Queue
                     </button>
 
-                    <div class="collapsible__content" id="advanced-settings">
-                        <div class="form-group">
-                            <label class="form-label">AI Model</label>
-                            <select id="opt-model" class="form-select">
-                                <option value="htdemucs_ft">Demucs v4 Fine-tuned (Best)</option>
-                                <option value="htdemucs">Demucs v4 Standard</option>
-                                <option value="mdx_extra">MDX-Net Extra (Fast)</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Quality</label>
-                            <select id="opt-quality" class="form-select">
-                                <option value="fast">Fast (1 shift)</option>
-                                <option value="hq" selected>High Quality (2 shifts)</option>
-                                <option value="ultra">Ultra (5 shifts)</option>
-                            </select>
-                        </div>
+                    <div class="btn-group">
+                        <button id="btn-stop-queue" class="btn btn-secondary" disabled>
+                            <i class="fas fa-stop"></i> Stop
+                        </button>
+                        <button id="btn-clear-completed" class="btn btn-secondary">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
                     </div>
                 </div>
-            </div>
+            </aside>
 
-            <!-- Queue Actions Section -->
-            <div class="section">
-                <div class="section__title">Queue Actions</div>
-
-                <button id="btn-start-queue" class="btn btn-primary" disabled>
-                    <i class="fas fa-play"></i> Start Queue
-                </button>
-
-                <div class="btn-group mt-sm">
-                    <button id="btn-stop-queue" class="btn btn-secondary" disabled>
-                        <i class="fas fa-stop"></i> Stop
-                    </button>
-
-                    <button id="btn-clear-completed" class="btn btn-secondary">
-                        <i class="fas fa-trash"></i> Clear
-                    </button>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Queue Panel -->
-        <section class="panel-queue">
-            <div class="queue-header">
-                <div>
-                    <div class="queue-header__title">Job Queue</div>
-                    <div class="queue-stats" id="queue-stats">
-                        0 pending · 0 processing · 0 completed
+            <!-- Right Area - Multi-View Container -->
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <!-- View 1 & 2: Queue Panel (Vocal Remover & Stem Splitter) -->
+                <section id="view-queue" class="panel-queue view active">
+                    <!-- Queue Header -->
+                    <div class="queue-header">
+                        <div class="queue-header__title">Job Queue</div>
+                        <div class="queue-stats" id="queue-stats">
+                            0 pending · 0 processing · 0 completed
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <div id="job-list" class="job-list">
-                <!-- Job items will be inserted here dynamically -->
-            </div>
+                    <!-- Job List - Scroll Interno -->
+                    <div id="job-list" class="job-list">
+                        <!-- Job items will be inserted here dynamically -->
+                    </div>
 
-            <!-- Console Log -->
-            <div class="console-section">
-                <div class="console-toggle" id="console-toggle">
-                    <span class="console-toggle__text">Debug Log</span>
-                    <span>▼</span>
-                </div>
-                <div id="console-log" class="console-log">
-                    <!-- Log entries will be inserted here -->
-                </div>
+                    <!-- Debug Log - Details Colapsado -->
+                    <details class="console-details" id="console-details">
+                        <summary>Debug Log</summary>
+                        <div id="console-log" class="console-log">
+                            <!-- Log entries will be inserted here -->
+                        </div>
+                    </details>
+                </section>
+
+                <!-- View 3: Settings Panel -->
+                <section id="view-settings" class="settings-panel view">
+                    <div class="settings-panel__title">
+                        <i class="fas fa-cog"></i> Advanced Settings
+                    </div>
+                    <div class="settings-panel__subtitle">
+                        Configure AI models, processing quality, and hardware preferences
+                    </div>
+
+                    <div class="settings-grid">
+                        <!-- AI Model Card -->
+                        <div class="settings-card">
+                            <div class="settings-card__title">
+                                <i class="fas fa-brain"></i> AI Model
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Select Model</label>
+                                <select id="settings-model" class="form-select">
+                                    <option value="htdemucs_ft">Demucs v4 Fine-tuned (Best Quality)</option>
+                                    <option value="htdemucs">Demucs v4 Standard</option>
+                                    <option value="mdx_extra">MDX-Net Extra (Faster)</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;">
+                                Fine-tuned model provides the best quality but requires more processing time.
+                            </p>
+                        </div>
+
+                        <!-- Quality Card -->
+                        <div class="settings-card">
+                            <div class="settings-card__title">
+                                <i class="fas fa-sliders-h"></i> Processing Quality
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Quality Level</label>
+                                <select id="settings-quality" class="form-select">
+                                    <option value="fast">Fast (1 shift)</option>
+                                    <option value="hq" selected>High Quality (2 shifts)</option>
+                                    <option value="ultra">Ultra Quality (5 shifts)</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;">
+                                Higher quality uses multiple processing passes for better separation.
+                            </p>
+                        </div>
+
+                        <!-- Device Card -->
+                        <div class="settings-card">
+                            <div class="settings-card__title">
+                                <i class="fas fa-microchip"></i> Hardware Device
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Processing Device</label>
+                                <select id="settings-device" class="form-select">
+                                    <option value="auto">Auto-detect (Recommended)</option>
+                                    <option value="cuda">GPU (CUDA)</option>
+                                    <option value="cpu">CPU Only</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;">
+                                GPU acceleration (CUDA) is significantly faster if available.
+                            </p>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </section>
-    </main>
+        </main>
+    </div>
 
     <script>
         const { ipcRenderer } = require('electron');
@@ -189,10 +247,15 @@
             optFormat: document.getElementById('opt-format'),
             optModel: document.getElementById('opt-model'),
             optQuality: document.getElementById('opt-quality'),
-            advancedToggle: document.getElementById('advanced-toggle'),
-            advancedSettings: document.getElementById('advanced-settings'),
-            consoleToggle: document.getElementById('console-toggle'),
             consoleLog: document.getElementById('console-log'),
+            navTabs: document.querySelectorAll('.nav-tab'),
+            // Views
+            viewQueue: document.getElementById('view-queue'),
+            viewSettings: document.getElementById('view-settings'),
+            // Settings panel controls
+            settingsModel: document.getElementById('settings-model'),
+            settingsQuality: document.getElementById('settings-quality'),
+            settingsDevice: document.getElementById('settings-device'),
         };
 
         // =================================================================
@@ -591,26 +654,77 @@
         });
 
         // =================================================================
-        // Advanced Settings Toggle
+        // Navigation Tabs - View Switcher
         // =================================================================
 
-        elements.advancedToggle.addEventListener('click', () => {
-            const icon = elements.advancedToggle.querySelector('.collapsible__icon');
-            const isOpen = elements.advancedSettings.classList.toggle('open');
-            icon.classList.toggle('open', isOpen);
+        elements.navTabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => {
+                // Remove active from all tabs
+                elements.navTabs.forEach(t => t.classList.remove('active'));
+
+                // Add active to clicked tab
+                tab.classList.add('active');
+
+                // Switch view and mode based on tab
+                if (index === 0) {
+                    // Vocal Remover - Show Queue View
+                    showView('queue');
+                    elements.optMode.value = 'vocal_remover';
+                    logConsole('Switched to Vocal Remover mode');
+                } else if (index === 1) {
+                    // Stem Splitter - Show Queue View
+                    showView('queue');
+                    elements.optMode.value = 'splitter';
+                    logConsole('Switched to Stem Splitter mode');
+                } else if (index === 2) {
+                    // Settings - Show Settings View
+                    showView('settings');
+                    logConsole('Opened Settings panel');
+                }
+            });
         });
 
         // =================================================================
-        // Console Toggle
+        // View Management
         // =================================================================
 
-        elements.consoleToggle.addEventListener('click', () => {
-            const isOpen = elements.consoleLog.classList.toggle('open');
-            const arrow = elements.consoleToggle.querySelector('span:last-child');
-            if (arrow) {
-                arrow.textContent = isOpen ? '▲' : '▼';
+        function showView(viewName) {
+            // Hide all views
+            elements.viewQueue.classList.remove('active');
+            elements.viewSettings.classList.remove('active');
+
+            // Show selected view
+            if (viewName === 'queue') {
+                elements.viewQueue.classList.add('active');
+            } else if (viewName === 'settings') {
+                elements.viewSettings.classList.add('active');
             }
+        }
+
+        // =================================================================
+        // Settings Synchronization
+        // =================================================================
+
+        // Sync settings panel controls with hidden controls
+        elements.settingsModel.addEventListener('change', () => {
+            elements.optModel.value = elements.settingsModel.value;
+            logConsole(`AI Model changed to: ${elements.settingsModel.value}`);
         });
+
+        elements.settingsQuality.addEventListener('change', () => {
+            elements.optQuality.value = elements.settingsQuality.value;
+            logConsole(`Quality changed to: ${elements.settingsQuality.value}`);
+        });
+
+        elements.settingsDevice.addEventListener('change', () => {
+            elements.optDevice.value = elements.settingsDevice.value;
+            logConsole(`Device changed to: ${elements.settingsDevice.value}`);
+        });
+
+        // Initialize settings panel with current values
+        elements.settingsModel.value = elements.optModel.value;
+        elements.settingsQuality.value = elements.optQuality.value;
+        elements.settingsDevice.value = elements.optDevice.value;
 
         // =================================================================
         // Prevent default drag & drop behavior on entire window
