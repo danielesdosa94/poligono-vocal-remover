@@ -90,7 +90,7 @@ body {
 
 .app-container {
     display: grid;
-    grid-template-rows: var(--header-height) var(--brand-height) 1fr;
+    grid-template-rows: var(--header-height) var(--brand-height) 30px 1fr;
     height: 100vh;
     overflow: hidden;
 }
@@ -188,6 +188,17 @@ body {
 }
 
 /* ============================================================================
+   Spacer - Forzado
+   ========================================================================= */
+
+.spacer-lg {
+    height: 30px !important;
+    width: 100% !important;
+    flex-shrink: 0 !important;
+    background: var(--color-bg);
+}
+
+/* ============================================================================
    Main Content - Two Column Grid
    ========================================================================= */
 
@@ -217,7 +228,8 @@ body {
 .control-section--scrollable {
     flex: 1;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: visible !important;
+    padding: var(--spacing-lg) var(--spacing-md) !important;
 }
 
 .control-section--scrollable::-webkit-scrollbar {
@@ -254,8 +266,8 @@ body {
 .drop-zone {
     border: 2px dashed var(--color-border);
     border-radius: var(--radius-md);
-    padding: var(--spacing-xl) var(--spacing-lg);
-    min-height: 180px;
+    padding: var(--spacing-lg);
+    min-height: 160px;
     text-align: center;
     cursor: pointer;
     transition: all var(--transition-base);
@@ -308,6 +320,8 @@ body {
 
 .form-group {
     margin-bottom: var(--spacing-md);
+    padding: 5px !important;
+    border: 1px solid transparent !important;
 }
 
 .form-group:last-child {
@@ -325,7 +339,7 @@ body {
 }
 
 .form-select {
-    width: 100%;
+    width: 96% !important;
     padding: 12px 14px;
     background: var(--color-bg);
     border: 1px solid #444444 !important;
@@ -342,7 +356,9 @@ body {
     background-repeat: no-repeat;
     background-position: right 14px center;
     padding-right: 40px;
-    box-sizing: border-box;
+    box-sizing: border-box !important;
+    display: block;
+    margin: 0 auto !important;
 }
 
 .form-select:hover {
@@ -826,6 +842,11 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--spacing-lg);
+}
+
+.settings-card .form-group {
+    padding: 8px !important;
+    border: 1px solid transparent !important;
 }
 
 .settings-card__title {
