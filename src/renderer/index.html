@@ -16,21 +16,26 @@
         <!-- Header - Solo Navegación -->
         <header class="header">
             <nav class="header__nav">
-                <button class="nav-tab active">Vocal Remover</button>
-                <button class="nav-tab">Stem Splitter</button>
-                <button class="nav-tab">Settings</button>
+                <button class="nav-tab active" data-i18n="tab.vocal_remover">Vocal Remover</button>
+                <button class="nav-tab" data-i18n="tab.stem_splitter">Stem Splitter</button>
+                <button class="nav-tab" data-i18n="tab.settings">Settings</button>
             </nav>
         </header>
 
         <!-- Brand - Logo y Título -->
         <section class="brand">
-            <img
-                src="../assets/logo.png"
-                alt="Polígono AI"
-                class="brand__logo"
-                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            <span class="brand__logo-fallback">🎵</span>
-            <h1 class="brand__title">POLÍGONO AI</h1>
+            <div class="brand__content">
+                <img
+                    src="../assets/logo.png"
+                    alt="Polígono AI"
+                    class="brand__logo"
+                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                <span class="brand__logo-fallback">🎵</span>
+                <h1 class="brand__title" data-i18n="app.title">AI AUDIO HUB</h1>
+            </div>
+            <div class="brand__subtitle" id="mode-description" data-i18n="mode.vocal_remover.subtitle">
+                Extract Vocals & Instrumental (2 Tracks)
+            </div>
         </section>
 
         <!-- Main Content - Two Column Grid -->
@@ -39,26 +44,26 @@
             <aside class="panel-control">
                 <!-- Drop Zone -->
                 <div class="control-section">
-                    <div class="section__title">Add Files</div>
+                    <div class="section__title" data-i18n="panel.add_files">Add Files</div>
                     <div id="drop-zone" class="drop-zone">
                         <div class="drop-zone__icon">
                             <i class="fas fa-file-audio"></i>
                         </div>
-                        <div class="drop-zone__text">Drop Files Here</div>
-                        <div class="drop-zone__hint">or click to browse</div>
+                        <div class="drop-zone__text" data-i18n="dropzone.text">Drop Files Here</div>
+                        <div class="drop-zone__hint" data-i18n="dropzone.hint">or click to browse</div>
                     </div>
                 </div>
 
                 <!-- Simple Settings (Only Output Format) -->
                 <div class="control-section control-section--scrollable">
-                    <div class="section__title">Output Settings</div>
+                    <div class="section__title" data-i18n="panel.output_settings">Output Settings</div>
 
                     <div class="form-group">
-                        <label class="form-label">Output Format</label>
+                        <label class="form-label" data-i18n="settings.output_format">Output Format</label>
                         <select id="opt-format" class="form-select">
-                            <option value="wav">WAV (Lossless)</option>
-                            <option value="flac">FLAC</option>
-                            <option value="mp3">MP3</option>
+                            <option value="wav" data-i18n="format.wav">WAV (Lossless)</option>
+                            <option value="flac" data-i18n="format.flac">FLAC</option>
+                            <option value="mp3" data-i18n="format.mp3">MP3</option>
                         </select>
                     </div>
 
@@ -89,16 +94,16 @@
 
                 <!-- Action Buttons (Anclados al fondo) -->
                 <div class="control-section control-section--actions">
-                    <button id="btn-start-queue" class="btn btn-primary" disabled>
-                        <i class="fas fa-play"></i> Start Queue
+                    <button id="btn-start-queue" class="btn btn-primary" disabled data-i18n="button.start_queue">
+                        <i class="fas fa-play"></i> <span>Start Queue</span>
                     </button>
 
                     <div class="btn-group">
-                        <button id="btn-stop-queue" class="btn btn-secondary" disabled>
-                            <i class="fas fa-stop"></i> Stop
+                        <button id="btn-stop-queue" class="btn btn-secondary" disabled data-i18n="button.stop">
+                            <i class="fas fa-stop"></i> <span>Stop</span>
                         </button>
-                        <button id="btn-clear-completed" class="btn btn-secondary">
-                            <i class="fas fa-trash"></i> Clear
+                        <button id="btn-clear-completed" class="btn btn-secondary" data-i18n="button.clear">
+                            <i class="fas fa-trash"></i> <span>Clear</span>
                         </button>
                     </div>
                 </div>
@@ -110,9 +115,9 @@
                 <section id="view-queue" class="panel-queue view active">
                     <!-- Queue Header -->
                     <div class="queue-header">
-                        <div class="queue-header__title">Job Queue</div>
+                        <div class="queue-header__title" data-i18n="queue.title">Job Queue</div>
                         <div class="queue-stats" id="queue-stats">
-                            0 pending · 0 processing · 0 completed
+                            <span data-i18n-template="queue.stats">0 pending · 0 processing · 0 completed</span>
                         </div>
                     </div>
 
@@ -252,7 +257,12 @@
             settingsModel: document.getElementById('settings-model'),
             settingsQuality: document.getElementById('settings-quality'),
             settingsDevice: document.getElementById('settings-device'),
+            // Brand subtitle
+            modeDescription: document.getElementById('mode-description'),
         };
+
+        // Current mode state
+        let currentMode = 'vocal_remover';
 
         // =================================================================
         // UI Helpers
@@ -664,17 +674,25 @@
                 // Switch view and mode based on tab
                 if (index === 0) {
                     // Vocal Remover - Show Queue View
+                    currentMode = 'vocal_remover';
                     showView('queue');
                     elements.optMode.value = 'vocal_remover';
+                    elements.modeDescription.textContent = 'Extract Vocals & Instrumental (2 Tracks)';
+                    elements.modeDescription.setAttribute('data-i18n', 'mode.vocal_remover.subtitle');
                     logConsole('Switched to Vocal Remover mode');
                 } else if (index === 1) {
                     // Stem Splitter - Show Queue View
+                    currentMode = 'splitter';
                     showView('queue');
                     elements.optMode.value = 'splitter';
+                    elements.modeDescription.textContent = 'Separate into 4 Stems (Vocals, Bass, Drums, Other)';
+                    elements.modeDescription.setAttribute('data-i18n', 'mode.splitter.subtitle');
                     logConsole('Switched to Stem Splitter mode');
                 } else if (index === 2) {
                     // Settings - Show Settings View
                     showView('settings');
+                    elements.modeDescription.textContent = 'Configure AI models, processing quality, and hardware';
+                    elements.modeDescription.setAttribute('data-i18n', 'mode.settings.subtitle');
                     logConsole('Opened Settings panel');
                 }
             });
