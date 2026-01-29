@@ -59,7 +59,8 @@
     --transition-slow: 350ms ease;
 
     /* Layout Sizes */
-    --header-height: 80px;
+    --header-height: 56px;
+    --brand-height: 100px;
     --panel-width: 320px;
 }
 
@@ -89,7 +90,7 @@ body {
 
 .app-container {
     display: grid;
-    grid-template-rows: var(--header-height) 1fr;
+    grid-template-rows: var(--header-height) var(--brand-height) 1fr;
     height: 100vh;
     overflow: hidden;
 }
@@ -101,45 +102,17 @@ body {
 .header {
     background: var(--color-panel);
     border-bottom: 1px solid var(--color-border);
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    padding: var(--spacing-lg) var(--spacing-xl);
-    height: var(--header-height);
-}
-
-/* Logo Central */
-.header__brand {
-    grid-column: 2;
     display: flex;
     align-items: center;
-    gap: var(--spacing-md);
-    justify-content: center;
-}
-
-.header__logo {
-    height: 48px;
-    width: auto;
-}
-
-.header__logo-fallback {
-    font-size: 36px;
-    display: none;
-}
-
-.header__title {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--color-text);
-    letter-spacing: -0.5px;
+    justify-content: flex-end;
+    padding: 0 var(--spacing-xl);
+    height: var(--header-height);
 }
 
 /* Navegación - Pestañas */
 .header__nav {
-    grid-column: 3;
     display: flex;
     gap: var(--spacing-sm);
-    justify-content: flex-end;
 }
 
 .nav-tab {
@@ -166,13 +139,46 @@ body {
 }
 
 /* ============================================================================
+   Brand Section - Logo y Título
+   ========================================================================= */
+
+.brand {
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    height: var(--brand-height);
+    padding: var(--spacing-lg);
+}
+
+.brand__logo {
+    height: 80px;
+    width: auto;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.brand__logo-fallback {
+    font-size: 64px;
+    display: none;
+}
+
+.brand__title {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* ============================================================================
    Main Content - Two Column Grid
    ========================================================================= */
 
 .main {
     display: grid;
     grid-template-columns: var(--panel-width) 1fr;
-    height: calc(100vh - var(--header-height));
     overflow: hidden;
 }
 
@@ -233,11 +239,16 @@ body {
 .drop-zone {
     border: 2px dashed var(--color-border);
     border-radius: var(--radius-md);
-    padding: var(--spacing-lg);
+    padding: var(--spacing-xl) var(--spacing-lg);
+    min-height: 180px;
     text-align: center;
     cursor: pointer;
     transition: all var(--transition-base);
     background: var(--color-bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .drop-zone:hover {
@@ -253,8 +264,8 @@ body {
 }
 
 .drop-zone__icon {
-    font-size: 32px;
-    margin-bottom: var(--spacing-xs);
+    font-size: 56px;
+    margin-bottom: var(--spacing-md);
     color: var(--color-text-secondary);
     transition: color var(--transition-base);
 }
@@ -265,14 +276,14 @@ body {
 }
 
 .drop-zone__text {
-    font-size: 13px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--color-text);
-    margin-bottom: 2px;
+    margin-bottom: var(--spacing-xs);
 }
 
 .drop-zone__hint {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--color-text-secondary);
 }
 
@@ -300,9 +311,9 @@ body {
 
 .form-select {
     width: 100%;
-    padding: 10px 12px;
+    padding: 12px 14px;
     background: var(--color-bg);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-light);
     border-radius: var(--radius-sm);
     color: var(--color-text);
     font-size: 13px;
@@ -312,8 +323,9 @@ body {
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23A0A0A0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 36px;
+    background-position: right 14px center;
+    padding-right: 40px;
+    box-sizing: border-box;
 }
 
 .form-select:hover {

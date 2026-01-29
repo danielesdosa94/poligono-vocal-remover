@@ -13,29 +13,25 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- Header - Top Bar -->
+        <!-- Header - Solo Navegación -->
         <header class="header">
-            <!-- Espacio izquierdo vacío para grid -->
-            <div></div>
-
-            <!-- Logo y Título Central -->
-            <div class="header__brand">
-                <img
-                    src="../assets/logo.png"
-                    alt="Polígono AI"
-                    class="header__logo"
-                    onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                <span class="header__logo-fallback">🎵</span>
-                <h1 class="header__title">POLÍGONO AI</h1>
-            </div>
-
-            <!-- Navegación - Pestañas -->
             <nav class="header__nav">
                 <button class="nav-tab active">Vocal Remover</button>
                 <button class="nav-tab">Stem Splitter</button>
                 <button class="nav-tab">Settings</button>
             </nav>
         </header>
+
+        <!-- Brand - Logo y Título -->
+        <section class="brand">
+            <img
+                src="../assets/logo.png"
+                alt="Polígono AI"
+                class="brand__logo"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <span class="brand__logo-fallback">🎵</span>
+            <h1 class="brand__title">POLÍGONO AI</h1>
+        </section>
 
         <!-- Main Content - Two Column Grid -->
         <main class="main">
