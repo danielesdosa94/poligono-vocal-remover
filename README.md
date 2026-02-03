@@ -1,127 +1,101 @@
-# Polígono Vocal Remover
+# Polígono AI Hub
 
-AI-powered vocal removal tool for audio and video files.
+Professional AI Audio Processing Suite for Sound Designers and Musicians.
+Developed by **Polígono Studio**.
 
-## Phase 1: Communication Protocol Testing
+![Polígono AI Hub](assets/logo.png)
 
-This skeleton implements the robust communication layer between Electron and Python.
+## Overview
 
-### Features Implemented
+Polígono AI Hub is a local, desktop-based application that leverages state-of-the-art AI models (Demucs v4) to separate audio tracks. Unlike cloud services, it runs entirely offline, utilizing your GPU for maximum privacy and speed.
 
-- ✅ JSON-based communication protocol
-- ✅ Graceful process cancellation (SIGTERM/SIGINT handling)
-- ✅ Line-by-line stdout parsing
-- ✅ Video support (FFmpeg audio extraction)
-- ✅ Multiple quality presets
-- ✅ GPU/CPU device selection
-- ✅ Structured error handling
+It features a robust **Batch Processing Queue**, allowing users to drag and drop multiple files and let the AI work in the background without freezing the UI.
 
-### Project Structure
+## Key Features
 
-```
-poligono-vocal-remover/
+### 🎧 Processing Modes
+* **Vocal Remover (2 Tracks):** Extracts *Vocals* and creates a mixed *Instrumental* track. Ideal for karaoke, ADR, and lip-sync analysis.
+* **Stem Splitter (4 Tracks):** Separates audio into *Vocals, Bass, Drums, and Other*. Perfect for remixing and sampling.
+
+### 🚀 Core Functionality
+* **Batch Queue System:** Process hundreds of files sequentially.
+* **Smart State Management:** Distinct "Ready" vs "Waiting" states with realistic progress bars.
+* **Format Agnostic:** Accepts Audio (WAV, MP3, FLAC) and Video (MP4, MOV, MKV) inputs.
+* **Output Flexibility:** Exports to WAV (Lossless), FLAC, or MP3.
+* **Hardware Acceleration:** Auto-detects CUDA (NVIDIA GPU) for 10x faster inference compared to CPU.
+
+### 🎨 UI/UX
+* **Hub Architecture:** Single-view interface with tabbed navigation.
+* **Polígono Design System:** Dark mode optimized for studio environments.
+* **Internationalization:** Native support for English (EN) and Spanish (ES) [Coming Soon].
+
+---
+
+## Project Structure
+
+```text
+poligono-ai-hub/
 ├── src/
-│   ├── main.js              # Electron main process
+│   ├── main.js              # Electron Orchestrator (Window & Process Mgmt)
 │   └── renderer/
-│       └── index.html       # Testing UI
+│       ├── index.html       # Single Page Application (Hub UI)
+│       ├── css/
+│       │   └── styles.css   # Polígono Design System
+│       ├── js/
+│       │   ├── app.js       # UI Logic & Queue Manager
+│       │   └── translations.js # i18n Dictionaries (EN/ES)
+│       └── assets/
+│           └── logo.png     # Branding
 ├── python/
-│   ├── motor.py             # AI processing engine
-│   ├── requirements.txt
+│   ├── motor.py             # Python AI Engine (Demucs Wrapper)
 │   └── utils/
-│       ├── protocol.py      # JSON protocol
-│       └── signal_handler.py # Cancellation handling
-├── package.json
-└── PROJECT_STRUCTURE.md     # Full architecture docs
-```
+│       └── protocol.py      # JSON Communication Layer
+├── package.json             # Node Dependencies & Build Scripts
+└── README.md                # Documentation
 
 ## Setup Instructions
 
 ### Prerequisites
+* **Node.js:** v18 or higher.
+* **Python:** v3.10 (Recommended).
+* **FFmpeg:** Required for video file processing.
+* **CUDA Toolkit 11.8+:** Highly recommended for NVIDIA GPU users.
 
-- Node.js 18+ and npm
-- Python 3.10+ 
-- FFmpeg (for video support)
-- CUDA Toolkit 11.8+ (optional, for GPU acceleration)
-
-### 1. Install Node Dependencies
+### 1. Installation
 
 ```bash
+# Clone repository
+git clone [repo-url]
+
+# Install Node dependencies
 npm install
-```
 
-### 2. Setup Python Environment
-
-```bash
-# Create virtual environment
+# Setup Python Environment
 cd python
 python -m venv venv
-
-# Activate it
-# Windows:
-venv\Scripts\activate
-# macOS/Linux:
-source venv/bin/activate
-
-# Install dependencies
+# Activate: .\venv\Scripts\activate (Windows) or source venv/bin/activate (Mac/Linux)
 pip install -r requirements.txt
 
-# For GPU support (choose your CUDA version):
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-```
+2. External Dependencies
+FFmpeg: Download ffmpeg.exe and ffprobe.exe and place them in resources/bin/ffmpeg/.
 
-### 3. Download FFmpeg (for video support)
+PyTorch (GPU): Ensure you install the CUDA-enabled version of PyTorch: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-1. Download from: https://github.com/BtbN/FFmpeg-Builds/releases
-2. Extract `ffmpeg.exe` and `ffprobe.exe` to `resources/bin/ffmpeg/`
-
-### 4. Run Development Mode
-
-```bash
+3. Development Run
+Bash
 npm run dev
-```
 
-## Protocol Reference
+Roadmap
+[x] Phase 1: Core AI Implementation & Protocol (Completed)
 
-### Event Types (Python → Electron)
+[x] Phase 2: Queue System & Video Support (Completed)
 
-| Event | Description | Key Fields |
-|-------|-------------|------------|
-| `start` | Processing began | `file`, `model`, `device` |
-| `step_change` | New processing phase | `step`, `stepNumber`, `totalSteps` |
-| `progress` | Progress update | `stepPercent`, `globalPercent`, `eta` |
-| `log` | Debug message | `message`, `level` |
-| `warning` | Non-fatal issue | `message`, `code` |
-| `error` | Error occurred | `message`, `code`, `fatal` |
-| `success` | Processing complete | `outputs`, `elapsedSeconds` |
-| `cancelled` | User cancelled | `reason`, `lastStep` |
+[x] Phase 3: UI/UX Overhaul & Branding (Completed)
 
-### Example Protocol Message
+[ ] Phase 4: Internationalization (In Progress)
 
-```json
-{
-  "event": "progress",
-  "timestamp": "2024-01-15T10:30:45.123456",
-  "stepPercent": 45.5,
-  "globalPercent": 38.2,
-  "currentStep": "separating",
-  "detail": "Processing chunk 3/10",
-  "etaSeconds": 120
-}
-```
+[ ] Phase 5: Compilation (.exe) & Installer
 
-## Testing the Protocol
+License: Proprietary - Polígono Studio.
 
-1. Run `npm run dev`
-2. Select an audio file
-3. Click "Start Processing"
-4. Watch the Protocol Log panel for JSON messages
-5. Test cancellation with "Cancel" button
-
-## Next Steps (Phase 2)
-
-- [ ] Waveform visualization
-- [ ] File queue system
-- [ ] Polished UI design
-- [ ] Fun facts during processing
-- [ ] ETA calculation
-- [ ] PyInstaller compilation spec
+---
