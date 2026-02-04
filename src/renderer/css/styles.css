@@ -295,6 +295,7 @@ body {
     margin-bottom: var(--spacing-md);
     color: var(--color-text-secondary);
     transition: color var(--transition-base);
+    pointer-events: none; /* Prevent drag events from targeting children */
 }
 
 .drop-zone:hover .drop-zone__icon,
@@ -307,11 +308,13 @@ body {
     font-weight: 600;
     color: var(--color-text);
     margin-bottom: var(--spacing-xs);
+    pointer-events: none; /* Prevent drag events from targeting children */
 }
 
 .drop-zone__hint {
     font-size: 12px;
     color: var(--color-text-secondary);
+    pointer-events: none; /* Prevent drag events from targeting children */
 }
 
 /* ============================================================================

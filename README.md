@@ -92,7 +92,7 @@ Roadmap
 
 [x] Phase 3: UI/UX Overhaul & Branding (Completed)
 
-[ ] Phase 4: Internationalization (In Progress)
+[x] Phase 4: Internationalization (Completed)
 
 [ ] Phase 5: Compilation (.exe) & Installer
 
