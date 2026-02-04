@@ -23,9 +23,6 @@ retrying==1.4.2
 soundfile==0.13.1
 submitit==1.5.4
 sympy==1.14.0
-torch==2.7.1+cu118
-torchaudio==2.7.1+cu118
-torchvision==0.22.1+cu118
 tqdm==4.67.1
 treetable==0.2.6
 typing_extensions==4.15.0
