@@ -364,6 +364,7 @@ body {
     box-sizing: border-box !important;
     display: block;
     margin: 0 auto !important;
+    margin-bottom: 5px !important; /* CRITICAL: Space to prevent bottom border cut */
     position: relative;
     z-index: 10;
 }
@@ -857,6 +858,9 @@ body {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--spacing-lg);
+    padding-bottom: 30px !important; /* CRITICAL: Extra space for dropdown borders */
+    height: auto !important; /* Allow card to grow with content */
+    overflow: visible !important; /* Ensure borders and shadows are fully visible */
 }
 
 .settings-card .form-group {
@@ -877,6 +881,7 @@ body {
 .settings-card__title i {
     color: var(--color-primary);
 }
+
 
 /* ============================================================================
    View System - Tabs Control
