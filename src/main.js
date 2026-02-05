@@ -94,13 +94,7 @@ class ProcessManager {
             args.push('-u', paths.scriptPath);
         }
 
-        // Required positional arguments
-        args.push(inputPath, outputDir);
-
-        // Optional arguments
-        if (options.mode) {
-            args.push('--mode', options.mode);
-        }
+        // Optional arguments (flags must come BEFORE positional arguments)
         if (options.model) {
             args.push('--model', options.model);
         }
@@ -116,9 +110,15 @@ class ProcessManager {
         if (options.outputFormat) {
             args.push('--output-format', options.outputFormat);
         }
+        if (options.mode) {
+            args.push('--mode', options.mode);
+        }
         if (paths.ffmpegPath) {
             args.push('--ffmpeg-path', paths.ffmpegPath);
         }
+
+        // Required positional arguments (MUST be at the end)
+        args.push(inputPath, outputDir);
 
         return { command: paths.command, args };
     }
