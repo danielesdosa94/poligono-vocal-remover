@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --enable-logging",
+    "build": "electron-builder",
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:mac": "electron-builder --mac",
@@ -20,8 +21,8 @@
   },
   "dependencies": {},
   "build": {
-    "appId": "com.poligonostudio.vocalremover",
-    "productName": "Polígono Vocal Remover",
+    "appId": "com.poligonostudio.aihub",
+    "productName": "Polígono AI Hub",
     "copyright": "Copyright © 2024 Polígono Studio",
     "directories": {
       "output": "release",
@@ -65,7 +66,7 @@
           ]
         }
       ],
-      "icon": "resources/assets/logo.ico",
+      "icon": "src/assets/logo.png",
       "artifactName": "${productName}-${version}-Setup.${ext}"
     },
     "nsis": {
@@ -73,10 +74,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Polígono Vocal Remover",
-      "installerIcon": "resources/assets/logo.ico",
-      "uninstallerIcon": "resources/assets/logo.ico",
-      "installerHeaderIcon": "resources/assets/logo.ico",
+      "shortcutName": "Polígono AI Hub",
+      "installerIcon": "src/assets/logo.png",
+      "uninstallerIcon": "src/assets/logo.png",
+      "installerHeaderIcon": "src/assets/logo.png",
       "license": "LICENSE.txt"
     },
     "mac": {
