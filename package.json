@@ -1,7 +1,7 @@
 {
-  "name": "poligono-vocal-remover",
+  "name": "poligono-ai-hub",
   "version": "1.0.0",
-  "description": "AI-powered vocal removal tool for audio and video files",
+  "description": "AI-powered vocal removal & splitter tool for audio and video files",
   "main": "src/main.js",
   "author": "Polígono Studio",
   "license": "MIT",
