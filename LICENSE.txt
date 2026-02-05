@@ -1,0 +1,16 @@
+Polígono AI Hub
+Copyright (c) 2026 Polígono Studio
+
+END-USER LICENSE AGREEMENT (EULA)
+
+1. GRANT OF LICENSE
+Polígono Studio grants you a personal, non-exclusive, non-transferable license to install and use this software for personal or professional audio processing purposes.
+
+2. RESTRICTIONS
+You may not reverse engineer, decompile, or disassemble the software. You may not sell, rent, lease, or distribute copies of the software to third parties.
+
+3. COPYRIGHT
+All title and copyrights in and to the software (including but not limited to any images, animations, video, audio, music, text, and "applets" incorporated into the software) are owned by Polígono Studio.
+
+4. NO WARRANTY
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
