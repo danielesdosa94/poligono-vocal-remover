@@ -476,10 +476,8 @@ def separate_audio(
         if cancellation_token.is_cancelled:
             raise CancelledException()
 
-        # Build Demucs command line arguments
-        demucs_args = [
-            sys.executable,  # Use current Python interpreter
-            "-m", "demucs.separate",  # Run demucs as module
+        # Build Demucs-specific arguments (without python executable prefix)
+        demucs_cli_args = [
             "-n", model_name,
             "-o", temp_dir,
             "-j", "0",  # Workers = 0 to avoid subprocess issues in frozen apps
@@ -489,16 +487,16 @@ def separate_audio(
 
         # Add device flag
         if device == "cpu":
-            demucs_args.extend(["-d", "cpu"])
+            demucs_cli_args.extend(["-d", "cpu"])
 
         # Add output format if not wav
         if output_format == "mp3":
-            demucs_args.extend(["--mp3"])
+            demucs_cli_args.extend(["--mp3"])
         elif output_format == "flac":
-            demucs_args.extend(["--flac"])
+            demucs_cli_args.extend(["--flac"])
 
         # Add input file
-        demucs_args.append(input_path)
+        demucs_cli_args.append(input_path)
 
         protocol.emit_progress(50, detail="Model configuration ready")
 
@@ -514,70 +512,103 @@ def separate_audio(
         protocol.emit_step_change(ProcessingStep.SEPARATING, step_number=4)
         protocol.emit_progress(0, detail=f"Separating with {shifts} shift(s)...")
 
-        # Run Demucs as subprocess to capture progress
-        creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-        process = subprocess.Popen(
-            demucs_args,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            bufsize=1,  # Line buffered
-            creationflags=creationflags
-        )
+        is_frozen = getattr(sys, 'frozen', False)
 
-        # Regex pattern to match progress percentages (e.g., "45%", "100%")
-        progress_pattern = re.compile(r'(\d+)%')
+        if is_frozen:
+            # ============================================================
+            # PRODUCTION (compiled .exe):
+            # sys.executable points to motor.exe, NOT python.exe,
+            # so we CANNOT use subprocess. Call demucs API directly.
+            # ============================================================
+            try:
+                from demucs.separate import main as demucs_main
+                protocol.emit_progress(5, detail="Running Demucs engine...")
+                demucs_main(demucs_cli_args)
+            except SystemExit as e:
+                if e.code != 0:
+                    protocol.emit_error(
+                        f"Demucs failed with exit code {e.code}",
+                        code="DEMUCS_ERROR"
+                    )
+                    return None
+            except CancelledException:
+                raise
+            except Exception as e:
+                protocol.emit_error(
+                    f"Demucs processing error: {str(e)}",
+                    code="DEMUCS_ERROR"
+                )
+                return None
+        else:
+            # ============================================================
+            # DEVELOPMENT (python script):
+            # Use subprocess for real-time progress tracking via stderr.
+            # ============================================================
+            demucs_args = [sys.executable, "-m", "demucs.separate"] + demucs_cli_args
 
-        # Read stderr line by line for progress updates
-        # Map Demucs 0-100% to visual 0-90% (reserve 90-100% for post-processing)
-        last_progress = 0
-        while True:
-            # Check cancellation
-            if cancellation_token.is_cancelled:
-                protocol.emit_log("Cancellation requested, terminating Demucs process...", level="debug")
-                process.kill()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pass
-                raise CancelledException()
-
-            # Read line from stderr (Demucs outputs progress to stderr)
-            line = process.stderr.readline()
-
-            # If no more output and process finished, break
-            if not line and process.poll() is not None:
-                break
-
-            if line:
-                line = line.strip()
-
-                # Try to extract progress percentage
-                match = progress_pattern.search(line)
-                if match:
-                    demucs_percent = int(match.group(1))
-                    # Map Demucs 0-100% to visual 0-90%
-                    visual_percent = int(demucs_percent * 0.90)
-                    # Only emit if progress increased (avoid spam)
-                    if visual_percent > last_progress:
-                        protocol.emit_progress(visual_percent, detail=f"Processing: {demucs_percent}%")
-                        last_progress = visual_percent
-                else:
-                    # Log non-progress lines as debug for visibility
-                    if line:
-                        protocol.emit_log(line, level="debug")
-
-        # Check exit code
-        return_code = process.wait()
-        if return_code != 0:
-            # Read any remaining stderr
-            stderr_output = process.stderr.read()
-            error_msg = stderr_output[:500] if stderr_output else "Unknown error"
-            protocol.emit_error(
-                f"Demucs process failed with code {return_code}: {error_msg}",
-                code="DEMUCS_ERROR"
+            creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            process = subprocess.Popen(
+                demucs_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                bufsize=1,  # Line buffered
+                creationflags=creationflags
             )
-            return None
+
+            # Regex pattern to match progress percentages (e.g., "45%", "100%")
+            progress_pattern = re.compile(r'(\d+)%')
+
+            # Read stderr line by line for progress updates
+            # Map Demucs 0-100% to visual 0-90% (reserve 90-100% for post-processing)
+            last_progress = 0
+            while True:
+                # Check cancellation
+                if cancellation_token.is_cancelled:
+                    protocol.emit_log("Cancellation requested, terminating Demucs process...", level="debug")
+                    process.kill()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    raise CancelledException()
+
+                # Read line from stderr (Demucs outputs progress to stderr)
+                line = process.stderr.readline()
+
+                # If no more output and process finished, break
+                if not line and process.poll() is not None:
+                    break
+
+                if line:
+                    line = line.strip()
+
+                    # Try to extract progress percentage
+                    match = progress_pattern.search(line)
+                    if match:
+                        demucs_percent = int(match.group(1))
+                        # Map Demucs 0-100% to visual 0-90%
+                        visual_percent = int(demucs_percent * 0.90)
+                        # Only emit if progress increased (avoid spam)
+                        if visual_percent > last_progress:
+                            protocol.emit_progress(visual_percent, detail=f"Processing: {demucs_percent}%")
+                            last_progress = visual_percent
+                    else:
+                        # Log non-progress lines as debug for visibility
+                        if line:
+                            protocol.emit_log(line, level="debug")
+
+            # Check exit code
+            return_code = process.wait()
+            if return_code != 0:
+                # Read any remaining stderr
+                stderr_output = process.stderr.read()
+                error_msg = stderr_output[:500] if stderr_output else "Unknown error"
+                protocol.emit_error(
+                    f"Demucs process failed with code {return_code}: {error_msg}",
+                    code="DEMUCS_ERROR"
+                )
+                return None
 
         # Post-processing phase: Show 95% while finalizing
         protocol.emit_progress(95, detail="Reconstructing audio & Saving...")
