@@ -31,7 +31,7 @@ npm-debug.log*
 # Temp files
 .temp_*
 *.tmp
-
+nul
 # Binaries (download separately)
 # Agregamos dll por si alguna dependencia la trae
 resources/bin/ffmpeg/*.exe
