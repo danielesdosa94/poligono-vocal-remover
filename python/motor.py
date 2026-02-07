@@ -54,6 +54,87 @@ from utils.signal_handler import signal_handler, CancellationToken, CancelledExc
 
 
 # =============================================================================
+# DEMUCS PROGRESS INTERCEPTOR (for compiled .exe mode)
+# =============================================================================
+
+class DemucsProgressInterceptor:
+    """
+    File-like object that intercepts stderr to capture Demucs/tqdm progress.
+
+    When running as a compiled .exe, we call demucs API directly (no subprocess),
+    so tqdm progress goes to stderr in-process. This interceptor:
+    1. Passes all output to the original stderr (for debug logs)
+    2. Parses percentage patterns and emits JSON progress to Electron via protocol
+
+    Demucs 0-100% is scaled to 0-90% of the app bar (last 10% = saving files).
+    """
+
+    _PROGRESS_RE = re.compile(r'(\d{1,3})%')
+
+    def __init__(self, original_stderr, protocol_ref):
+        self._original = original_stderr
+        self._protocol = protocol_ref
+        self._last_percent = -1
+        self._buffer = ""
+
+    def write(self, text):
+        # Always pass through to original stderr
+        if self._original:
+            try:
+                self._original.write(text)
+            except Exception:
+                pass
+
+        # Buffer text and process complete lines
+        self._buffer += text
+        while '\n' in self._buffer or '\r' in self._buffer:
+            # Split on either newline type
+            for sep in ['\n', '\r']:
+                if sep in self._buffer:
+                    line, self._buffer = self._buffer.split(sep, 1)
+                    self._parse_line(line)
+                    break
+
+        # Also check the buffer itself for progress (tqdm uses \r without \n)
+        if self._buffer:
+            self._parse_line(self._buffer)
+
+    def _parse_line(self, line):
+        match = self._PROGRESS_RE.search(line)
+        if match:
+            demucs_pct = int(match.group(1))
+            # Scale: Demucs 100% = app 90%
+            visual_pct = int(demucs_pct * 0.90)
+            # Only emit if progress actually increased
+            if visual_pct > self._last_percent:
+                self._last_percent = visual_pct
+                self._protocol.emit_progress(
+                    visual_pct,
+                    detail=f"Processing: {demucs_pct}%"
+                )
+
+    def flush(self):
+        if self._original:
+            try:
+                self._original.flush()
+            except Exception:
+                pass
+
+    def fileno(self):
+        if self._original:
+            return self._original.fileno()
+        raise io.UnsupportedOperation("fileno")
+
+    # Needed so tqdm and other libs treat this as a valid stream
+    def isatty(self):
+        return False
+
+    @property
+    def encoding(self):
+        return getattr(self._original, 'encoding', 'utf-8')
+
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
@@ -519,8 +600,12 @@ def separate_audio(
             # PRODUCTION (compiled .exe):
             # sys.executable points to motor.exe, NOT python.exe,
             # so we CANNOT use subprocess. Call demucs API directly.
+            # We intercept stderr to capture tqdm progress from Demucs.
             # ============================================================
+            original_stderr = sys.stderr
+            interceptor = DemucsProgressInterceptor(original_stderr, protocol)
             try:
+                sys.stderr = interceptor
                 from demucs.separate import main as demucs_main
                 protocol.emit_progress(5, detail="Running Demucs engine...")
                 demucs_main(demucs_cli_args)
@@ -539,6 +624,8 @@ def separate_audio(
                     code="DEMUCS_ERROR"
                 )
                 return None
+            finally:
+                sys.stderr = original_stderr
         else:
             # ============================================================
             # DEVELOPMENT (python script):
