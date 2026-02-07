@@ -71,10 +71,14 @@ class DemucsProgressInterceptor:
 
     _PROGRESS_RE = re.compile(r'(\d{1,3})%')
 
+    # Mapping: Demucs 0% → app 5%, Demucs 100% → app 90%
+    _FLOOR = 5
+    _CEILING = 90
+
     def __init__(self, original_stderr, protocol_ref):
         self._original = original_stderr
         self._protocol = protocol_ref
-        self._last_percent = -1
+        self._last_emitted = self._FLOOR
         self._buffer = ""
 
     def write(self, text):
@@ -88,7 +92,6 @@ class DemucsProgressInterceptor:
         # Buffer text and process complete lines
         self._buffer += text
         while '\n' in self._buffer or '\r' in self._buffer:
-            # Split on either newline type
             for sep in ['\n', '\r']:
                 if sep in self._buffer:
                     line, self._buffer = self._buffer.split(sep, 1)
@@ -103,11 +106,11 @@ class DemucsProgressInterceptor:
         match = self._PROGRESS_RE.search(line)
         if match:
             demucs_pct = int(match.group(1))
-            # Scale: Demucs 100% = app 90%
-            visual_pct = int(demucs_pct * 0.90)
-            # Only emit if progress actually increased
-            if visual_pct > self._last_percent:
-                self._last_percent = visual_pct
+            # Interpolate: 0% → 5%, 100% → 90%
+            visual_pct = self._FLOOR + int(demucs_pct * (self._CEILING - self._FLOOR) / 100)
+            # Monotonic: never go below the last value emitted
+            if visual_pct > self._last_emitted:
+                self._last_emitted = visual_pct
                 self._protocol.emit_progress(
                     visual_pct,
                     detail=f"Processing: {demucs_pct}%"
