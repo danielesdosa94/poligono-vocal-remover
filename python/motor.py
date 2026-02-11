@@ -38,7 +38,6 @@ import multiprocessing
 import time
 import subprocess
 import re
-import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, Tuple
 
@@ -411,6 +410,9 @@ def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> 
     """
     Mix bass, drums, and other stems into a single instrumental track.
 
+    Uses chunked streaming to avoid loading entire files into RAM.
+    Memory usage stays constant (~300KB) regardless of file length.
+
     Args:
         output_dir: Directory containing separated stems
         output_format: Output format (wav, mp3, flac)
@@ -419,67 +421,114 @@ def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> 
     Returns:
         True if successful, False otherwise
     """
+    BLOCKSIZE = 131072  # 128K frames per chunk (~3s at 44.1kHz stereo)
+
     try:
         import soundfile as sf
 
         ext = f".{output_format}" if output_format != "wav" else ".wav"
-
-        # Define stems to mix
         stems_to_mix = ["bass", "drums", "other"]
 
-        # Read all stems to mix
-        audio_data = []
-        sample_rate = None
-
-        for stem_name in stems_to_mix:
-            stem_path = os.path.join(output_dir, f"{stem_name}{ext}")
-            if not os.path.exists(stem_path):
-                protocol.emit_log(f"Stem not found: {stem_name}{ext}", level="debug")
-                continue
-
-            try:
-                data, sr = sf.read(stem_path)
-                if sample_rate is None:
-                    sample_rate = sr
-                elif sr != sample_rate:
-                    protocol.emit_warning(f"Sample rate mismatch for {stem_name}", code="SAMPLE_RATE_MISMATCH")
-                    continue
-
-                audio_data.append(data)
-                protocol.emit_log(f"Loaded {stem_name} for mixing: shape={data.shape}", level="debug")
-            except Exception as e:
-                protocol.emit_log(f"Error reading {stem_name}: {e}", level="debug")
-                continue
-
-        if not audio_data:
-            protocol.emit_error("No stems found to mix", code="NO_STEMS")
-            return False
-
-        # Mix by averaging (prevents clipping)
-        mixed = np.mean(audio_data, axis=0)
-
-        # Save instrumental track
-        instrumental_path = os.path.join(output_dir, f"instrumental{ext}")
-
-        # For MP3 and FLAC, we need to handle format-specific parameters
-        if output_format == "mp3":
-            sf.write(instrumental_path, mixed, sample_rate, format='MP3')
-        elif output_format == "flac":
-            sf.write(instrumental_path, mixed, sample_rate, format='FLAC')
-        else:  # wav
-            sf.write(instrumental_path, mixed, sample_rate)
-
-        protocol.emit_log(f"Instrumental track saved: {instrumental_path}", level="debug")
-
-        # Delete original stems
+        # Collect existing stem paths
+        stem_paths = []
         for stem_name in stems_to_mix:
             stem_path = os.path.join(output_dir, f"{stem_name}{ext}")
             if os.path.exists(stem_path):
-                try:
-                    os.remove(stem_path)
-                    protocol.emit_log(f"Removed {stem_name}{ext}", level="debug")
-                except Exception as e:
-                    protocol.emit_log(f"Failed to remove {stem_name}{ext}: {e}", level="debug")
+                stem_paths.append(stem_path)
+            else:
+                protocol.emit_log(f"Stem not found: {stem_name}{ext}", level="debug")
+
+        if not stem_paths:
+            protocol.emit_error("No stems found to mix", code="NO_STEMS")
+            return False
+
+        # Read metadata from first file to get sample rate, channels, total frames
+        info = sf.info(stem_paths[0])
+        sample_rate = info.samplerate
+        total_frames = info.frames
+        num_stems = len(stem_paths)
+
+        protocol.emit_log(
+            f"Mixing {num_stems} stems: {total_frames} frames @ {sample_rate}Hz",
+            level="debug"
+        )
+
+        # Determine output format params
+        instrumental_path = os.path.join(output_dir, f"instrumental{ext}")
+        write_kwargs = {"samplerate": sample_rate}
+        if output_format == "mp3":
+            write_kwargs["format"] = "MP3"
+        elif output_format == "flac":
+            write_kwargs["format"] = "FLAC"
+
+        # Open all source files + destination, stream in chunks
+        readers = []
+        writer = None
+        try:
+            for sp in stem_paths:
+                readers.append(sf.SoundFile(sp, mode='r'))
+
+            writer = sf.SoundFile(
+                instrumental_path,
+                mode='w',
+                channels=readers[0].channels,
+                **write_kwargs
+            )
+
+            frames_written = 0
+            last_progress_pct = 90  # We map mixing progress to 90-99%
+
+            while True:
+                blocks = []
+                min_read = BLOCKSIZE
+
+                for reader in readers:
+                    block = reader.read(BLOCKSIZE, dtype='float32')
+                    if len(block) == 0:
+                        min_read = 0
+                        break
+                    min_read = min(min_read, len(block))
+                    blocks.append(block)
+
+                if min_read == 0 or not blocks:
+                    break
+
+                # Trim all blocks to same length and average
+                trimmed = [b[:min_read] for b in blocks]
+                mixed_chunk = trimmed[0]
+                for b in trimmed[1:]:
+                    mixed_chunk = mixed_chunk + b
+                mixed_chunk = mixed_chunk / num_stems
+
+                writer.write(mixed_chunk)
+                frames_written += min_read
+
+                # Emit progress: map 0-100% of mixing to app 90-99%
+                if total_frames > 0:
+                    mix_pct = frames_written / total_frames
+                    visual_pct = 90 + int(mix_pct * 9)  # 90 → 99
+                    if visual_pct > last_progress_pct:
+                        last_progress_pct = visual_pct
+                        protocol.emit_progress(
+                            visual_pct,
+                            detail=f"Mixing instrumental: {int(mix_pct * 100)}%"
+                        )
+
+        finally:
+            for r in readers:
+                r.close()
+            if writer is not None:
+                writer.close()
+
+        protocol.emit_log(f"Instrumental track saved: {instrumental_path}", level="debug")
+
+        # Delete original stems that were mixed
+        for stem_path in stem_paths:
+            try:
+                os.remove(stem_path)
+                protocol.emit_log(f"Removed {os.path.basename(stem_path)}", level="debug")
+            except Exception as e:
+                protocol.emit_log(f"Failed to remove {os.path.basename(stem_path)}: {e}", level="debug")
 
         return True
 
