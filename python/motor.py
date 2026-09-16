@@ -185,6 +185,11 @@ QUALITY_PRESETS = {
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.m4a', '.ogg', '.wma', '.aac'}
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.wmv', '.flv'}
 
+# Demucs v4 models were trained at 44.1kHz and always emit stems at that rate,
+# whatever the input was. I compare against this to decide whether the finished
+# stems need converting back to the source rate.
+DEMUCS_NATIVE_SAMPLE_RATE = 44100
+
 
 # =============================================================================
 # ARGUMENT PARSING
@@ -359,13 +364,16 @@ def extract_audio_from_video(
     
     protocol.emit_log(f"Using FFmpeg: {ffmpeg}")
     
-    # Build command
+    # Build command.
+    # I deliberately DON'T pass "-ar" here: forcing a sample rate would resample
+    # the source before Demucs even sees it (a 48kHz film would silently become
+    # 44.1kHz). FFmpeg keeps the original rate when the flag is absent, so the
+    # true source rate survives all the way to the final resample step.
     cmd = [
         ffmpeg,
         "-i", video_path,
         "-vn",              # No video
         "-acodec", "pcm_s16le",  # PCM 16-bit
-        "-ar", "44100",     # 44.1kHz sample rate
         "-ac", "2",         # Stereo
         "-y",               # Overwrite output
         output_path
@@ -540,6 +548,162 @@ def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> 
         return False
 
 
+def probe_sample_rate(
+    media_path: str,
+    ffmpeg_path: Optional[str] = None
+) -> Optional[int]:
+    """
+    Read the sample rate of a media file without decoding the whole thing.
+
+    Tries soundfile first (instant, works for wav/flac/ogg). Falls back to
+    ffprobe for anything soundfile can't open (mp4, mov, mkv, m4a, wma...).
+
+    Args:
+        media_path: Path to the audio or video file
+        ffmpeg_path: Path to ffmpeg.exe, used to locate ffprobe.exe beside it
+
+    Returns:
+        Sample rate in Hz, or None if it couldn't be determined
+    """
+    # Fast path: soundfile reads the header of plain audio containers directly
+    try:
+        import soundfile as sf
+        return int(sf.info(media_path).samplerate)
+    except Exception:
+        pass
+
+    # Fallback: ask ffprobe, which handles video containers and exotic codecs
+    import subprocess
+
+    ffprobe = None
+    if ffmpeg_path:
+        # ffprobe.exe ships next to ffmpeg.exe in our bundled resources
+        candidate = os.path.join(os.path.dirname(ffmpeg_path), "ffprobe.exe")
+        if os.path.exists(candidate):
+            ffprobe = candidate
+    if not ffprobe:
+        ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return None
+
+    try:
+        result = subprocess.run(
+            [
+                ffprobe,
+                "-v", "error",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=sample_rate",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                media_path
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        )
+        value = result.stdout.strip().splitlines()
+        if value and value[0].isdigit():
+            return int(value[0])
+    except Exception:
+        pass
+
+    return None
+
+
+def resample_outputs_to_rate(
+    output_paths: Dict[str, str],
+    target_rate: int,
+    ffmpeg_path: Optional[str] = None
+) -> None:
+    """
+    Resample every finished stem to the source file's sample rate.
+
+    Demucs v4 models are trained at 44.1kHz, so no matter what I feed them the
+    stems always come out at 44.1kHz. For post-production work I want the stems
+    to drop straight into a 48kHz session without the DAW doing its own silent
+    conversion, so I convert them back here.
+
+    This does NOT recover detail that Demucs discarded - the audio is still
+    band-limited to what 44.1kHz carried. It's a workflow convenience so the
+    files match the timeline they're going into.
+
+    Each stem is converted to a temp file and then swapped in, so a failure on
+    one stem leaves the original 44.1kHz file intact rather than a corrupt one.
+
+    Args:
+        output_paths: Mapping of stem name -> file path (modified in place)
+        target_rate: Desired sample rate in Hz
+        ffmpeg_path: Path to ffmpeg binary
+    """
+    import subprocess
+
+    ffmpeg = ffmpeg_path or shutil.which("ffmpeg")
+    if not ffmpeg:
+        protocol.emit_warning(
+            "FFmpeg not found, keeping stems at Demucs native 44.1kHz",
+            code="RESAMPLE_NO_FFMPEG"
+        )
+        return
+
+    for stem_name, stem_path in list(output_paths.items()):
+        if not stem_path or not os.path.exists(stem_path):
+            continue
+
+        # Skip files that already sit at the target rate
+        current_rate = probe_sample_rate(stem_path, ffmpeg_path)
+        if current_rate == target_rate:
+            continue
+
+        base, ext = os.path.splitext(stem_path)
+        temp_path = f"{base}.resample_tmp{ext}"
+
+        # Use the built-in swr resampler rather than soxr: the bundled
+        # gyan.dev "essentials" FFmpeg is compiled without soxr and errors out
+        # with "Requested resampling engine is unavailable". swr with a wide
+        # filter and full precision is transparent for this conversion.
+        cmd = [
+            ffmpeg,
+            "-i", stem_path,
+            "-af", f"aresample={target_rate}:filter_size=256:phase_shift=10",
+            "-y",
+            temp_path
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=600,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            )
+
+            if result.returncode == 0 and os.path.exists(temp_path):
+                os.replace(temp_path, stem_path)
+                protocol.emit_log(
+                    f"Resampled {stem_name}: {current_rate}Hz -> {target_rate}Hz",
+                    level="debug"
+                )
+            else:
+                stderr = result.stderr.decode("utf-8", errors="replace")[:200]
+                protocol.emit_warning(
+                    f"Could not resample {stem_name}, keeping 44.1kHz: {stderr}",
+                    code="RESAMPLE_FAILED"
+                )
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+        except Exception as e:
+            protocol.emit_warning(
+                f"Resample error on {stem_name}, keeping 44.1kHz: {e}",
+                code="RESAMPLE_ERROR"
+            )
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+
+
 def separate_audio(
     input_path: str,
     output_dir: str,
@@ -549,7 +713,8 @@ def separate_audio(
     shifts_override: Optional[int],
     output_format: str,
     processing_mode: str,
-    cancellation_token: CancellationToken
+    cancellation_token: CancellationToken,
+    output_name: Optional[str] = None
 ) -> Optional[Dict[str, str]]:
     """
     Perform audio separation using Demucs.
@@ -570,6 +735,9 @@ def separate_audio(
         output_format: "wav", "mp3", or "flac"
         processing_mode: "vocal_remover" (2 tracks) or "splitter" (4 tracks)
         cancellation_token: For checking cancellation
+        output_name: Name to use for the output folder. For video inputs this
+            is the original video's name, because input_path points at a temp
+            wav and would otherwise give "separated_.temp_audio_<name>"
 
     Returns:
         Dict mapping stem names to file paths, or None on failure
@@ -770,8 +938,12 @@ def separate_audio(
             )
             return None
 
-        # Create final output directory
-        final_output_dir = os.path.join(output_dir, f"separated_{input_filename}")
+        # Create final output directory, preferring the caller-supplied name so
+        # video jobs are named after the video rather than the temp wav
+        final_output_dir = os.path.join(
+            output_dir,
+            f"separated_{output_name or input_filename}"
+        )
         if os.path.exists(final_output_dir):
             shutil.rmtree(final_output_dir)
 
@@ -884,10 +1056,19 @@ def main() -> int:
         if cancellation_token.check_and_report(protocol):
             return 6
         
+        # Read the source sample rate up front, before any processing touches
+        # the file. Demucs always outputs 44.1kHz, so I keep this around to
+        # restore the original rate on the finished stems.
+        source_sample_rate = probe_sample_rate(args.input_path, args.ffmpeg_path)
+        if source_sample_rate:
+            protocol.emit_log(f"Source sample rate: {source_sample_rate}Hz", level="info")
+        else:
+            protocol.emit_log("Could not detect source sample rate", level="debug")
+
         # Handle video files - extract audio first
         audio_path = args.input_path
         temp_audio = None
-        
+
         if is_video:
             protocol.emit_step_change(ProcessingStep.EXTRACTING_AUDIO, step_number=2)
             protocol.emit_progress(0, detail="Extracting audio from video...")
@@ -923,7 +1104,8 @@ def main() -> int:
             shifts_override=args.shifts,
             output_format=args.output_format,
             processing_mode=args.mode,
-            cancellation_token=cancellation_token
+            cancellation_token=cancellation_token,
+            output_name=Path(args.input_path).stem
         )
         
         # Cleanup temp audio if it was created
@@ -939,7 +1121,21 @@ def main() -> int:
         
         if cancellation_token.check_and_report(protocol):
             return 6
-        
+
+        # Restore the source sample rate. Demucs hands back 44.1kHz regardless
+        # of what went in, so a 48kHz film would otherwise come out at 44.1kHz
+        # and force the DAW to convert it on import.
+        if source_sample_rate and source_sample_rate != DEMUCS_NATIVE_SAMPLE_RATE:
+            protocol.emit_progress(
+                99,
+                detail=f"Restoring {source_sample_rate}Hz sample rate..."
+            )
+            resample_outputs_to_rate(
+                output_paths,
+                source_sample_rate,
+                args.ffmpeg_path
+            )
+
         # Success!
         protocol.emit_success(
             output_paths=output_paths,
@@ -947,7 +1143,8 @@ def main() -> int:
                 "model": args.model,
                 "device": device,
                 "quality": args.quality,
-                "stemsGenerated": len(output_paths)
+                "stemsGenerated": len(output_paths),
+                "sampleRate": source_sample_rate or DEMUCS_NATIVE_SAMPLE_RATE
             }
         )
         
