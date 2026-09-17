@@ -55,3 +55,10 @@ stems_*/
 *.egg-info/
 *.egg
 .eggs/
+
+#docs Claude
+CLAUDE.md
+docs/REFACTOR_PLAN.md
+
+# Test audio fixtures (binarios grandes, fuera del repo)
+tests/fixtures/
