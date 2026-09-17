@@ -320,6 +320,15 @@
             return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
         }
 
+        // All external text (file names, motor messages) goes through this
+        // before it touches an innerHTML template.
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                '"': '&quot;', "'": '&#39;'
+            })[ch]);
+        }
+
         function getStatusIcon(status, detail) {
             switch (status) {
                 case 'pending':
@@ -336,7 +345,8 @@
             const entry = document.createElement('div');
             entry.className = 'log-entry';
             const time = new Date().toLocaleTimeString();
-            entry.innerHTML = `<span class="log-level">[${level}]</span> ${time} - ${message}`;
+            entry.innerHTML = `<span class="log-level">[${escapeHtml(level)}]</span> `
+                + `${time} - ${escapeHtml(message)}`;
             elements.consoleLog.appendChild(entry);
             elements.consoleLog.scrollTop = elements.consoleLog.scrollHeight;
         }
@@ -353,14 +363,14 @@
                     ${getStatusIcon(job.status, job.detail)}
                 </div>
                 <div class="job-info">
-                    <div class="job-name" title="${job.file.name}">${job.file.name}</div>
+                    <div class="job-name" title="${escapeHtml(job.file.name)}">${escapeHtml(job.file.name)}</div>
                     <div class="job-meta">
-                        ${job.file.type.toUpperCase()} · ${formatFileSize(job.file.size)} · .${job.file.extension}
+                        ${escapeHtml(String(job.file.type).toUpperCase())} · ${formatFileSize(job.file.size)} · .${escapeHtml(job.file.extension)}
                     </div>
                     <div class="job-progress">
                         <div class="job-progress-bar" style="width: ${job.progress}%"></div>
                     </div>
-                    <div class="job-detail">${job.detail}</div>
+                    <div class="job-detail">${escapeHtml(job.detail)}</div>
                 </div>
                 <div class="job-actions">
                     ${job.status === 'completed' ?
@@ -694,9 +704,10 @@
 
         ipcRenderer.on('motor:progress', (event, data) => {
             if (state.currentJobId) {
-                const rawProgress = data.stepPercent || data.globalPercent || 0;
-                // Scale to 90% (AI processing phase)
-                const scaledProgress = Math.round(rawProgress * 0.9);
+                // The motor already maps Demucs 0-100% into its own band, so
+                // this value goes straight to the bar. Scaling it again here
+                // capped the bar at 81%.
+                const scaledProgress = Math.round(data.stepPercent || data.globalPercent || 0);
 
                 const dict = translations[currentLanguage] || translations['en'];
                 updateJob(state.currentJobId, {

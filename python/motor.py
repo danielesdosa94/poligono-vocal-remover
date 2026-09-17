@@ -373,7 +373,9 @@ def extract_audio_from_video(
         ffmpeg,
         "-i", video_path,
         "-vn",              # No video
-        "-acodec", "pcm_s16le",  # PCM 16-bit
+        # 32-bit float: the whole chain stays float from here on. Extracting
+        # to 16 bit would quantize the audio before Demucs even sees it.
+        "-acodec", "pcm_f32le",
         "-ac", "2",         # Stereo
         "-y",               # Overwrite output
         output_path
@@ -468,6 +470,12 @@ def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> 
             write_kwargs["format"] = "MP3"
         elif output_format == "flac":
             write_kwargs["format"] = "FLAC"
+            # FLAC has no float subtype; 24-bit integer is its ceiling.
+            write_kwargs["subtype"] = "PCM_24"
+        else:
+            # Without an explicit subtype soundfile writes PCM_16 for .wav,
+            # re-quantizing the float32 stems we just asked Demucs for.
+            write_kwargs["subtype"] = "FLOAT"
 
         # Open all source files + destination, stream in chunks
         readers = []
@@ -501,12 +509,16 @@ def mix_instrumental_track(output_dir: str, output_format: str, stems: list) -> 
                 if min_read == 0 or not blocks:
                     break
 
-                # Trim all blocks to same length and average
+                # Trim all blocks to the same length and SUM them. Demucs
+                # stems are additive (bass+drums+other+vocals ~= the mix), so
+                # the instrumental is their sum. Averaging divides by 3, which
+                # drops it ~9.5 dB and breaks the null test against the source.
+                # The sum can exceed 1.0 on a hot mix; float32 WAV holds that
+                # without clipping.
                 trimmed = [b[:min_read] for b in blocks]
                 mixed_chunk = trimmed[0]
                 for b in trimmed[1:]:
                     mixed_chunk = mixed_chunk + b
-                mixed_chunk = mixed_chunk / num_stems
 
                 writer.write(mixed_chunk)
                 frames_written += min_read
@@ -610,10 +622,26 @@ def probe_sample_rate(
     return None
 
 
+def probe_frame_count(media_path: str) -> Optional[int]:
+    """
+    Read the frame count of an audio file from its header.
+
+    Returns:
+        Number of frames, or None if soundfile cannot open the file
+    """
+    try:
+        import soundfile as sf
+        return int(sf.info(media_path).frames)
+    except Exception:
+        return None
+
+
 def resample_outputs_to_rate(
     output_paths: Dict[str, str],
     target_rate: int,
-    ffmpeg_path: Optional[str] = None
+    ffmpeg_path: Optional[str] = None,
+    output_format: str = "wav",
+    expected_frames: Optional[int] = None
 ) -> None:
     """
     Resample every finished stem to the source file's sample rate.
@@ -634,6 +662,8 @@ def resample_outputs_to_rate(
         output_paths: Mapping of stem name -> file path (modified in place)
         target_rate: Desired sample rate in Hz
         ffmpeg_path: Path to ffmpeg binary
+        output_format: "wav", "flac" or "mp3", used to pick the encoder
+        expected_frames: Frame count of the source, for a sample-accuracy check
     """
     import subprocess
 
@@ -644,6 +674,16 @@ def resample_outputs_to_rate(
             code="RESAMPLE_NO_FFMPEG"
         )
         return
+
+    # Pin the codec explicitly. Left to itself ffmpeg picks the container
+    # default (pcm_s16le for wav, 16-bit flac, 128k mp3), which would undo the
+    # float32 / 24-bit stems we just produced.
+    if output_format == "flac":
+        codec_args = ["-sample_fmt", "s32", "-c:a", "flac"]
+    elif output_format == "mp3":
+        codec_args = ["-c:a", "libmp3lame", "-b:a", "320k"]
+    else:
+        codec_args = ["-c:a", "pcm_f32le"]
 
     for stem_name, stem_path in list(output_paths.items()):
         if not stem_path or not os.path.exists(stem_path):
@@ -665,6 +705,7 @@ def resample_outputs_to_rate(
             ffmpeg,
             "-i", stem_path,
             "-af", f"aresample={target_rate}:filter_size=256:phase_shift=10",
+            *codec_args,
             "-y",
             temp_path
         ]
@@ -683,6 +724,18 @@ def resample_outputs_to_rate(
                     f"Resampled {stem_name}: {current_rate}Hz -> {target_rate}Hz",
                     level="debug"
                 )
+                # Sample-accurate check: the stems must line up frame for
+                # frame with the source, or they drift against picture in the
+                # DAW. Skipped for mp3, whose encoder always pads the tail.
+                if expected_frames and output_format != "mp3":
+                    new_frames = probe_frame_count(stem_path)
+                    if new_frames is not None and new_frames != expected_frames:
+                        protocol.emit_warning(
+                            f"{stem_name}: {new_frames} frames vs "
+                            f"{expected_frames} in source "
+                            f"(delta {new_frames - expected_frames})",
+                            code="FRAME_COUNT_MISMATCH"
+                        )
             else:
                 stderr = result.stderr.decode("utf-8", errors="replace")[:200]
                 protocol.emit_warning(
@@ -790,11 +843,17 @@ def separate_audio(
         if device == "cpu":
             demucs_cli_args.extend(["-d", "cpu"])
 
-        # Add output format if not wav
+        # Output format and bit depth. Demucs defaults to int16 WAV, which
+        # quantizes every stem before we mix them. --float32 keeps the wav
+        # path in 32-bit float; --int24 lifts the flac path from 16 to 24 bit.
+        # Note: --clip-mode has no "none" option, so Demucs still rescales a
+        # stem peaking above ~0.99. Phase 1 (own I/O) removes that for good.
         if output_format == "mp3":
             demucs_cli_args.extend(["--mp3"])
         elif output_format == "flac":
-            demucs_cli_args.extend(["--flac"])
+            demucs_cli_args.extend(["--flac", "--int24"])
+        else:
+            demucs_cli_args.append("--float32")
 
         # Add input file
         demucs_cli_args.append(input_path)
@@ -1093,7 +1152,14 @@ def main() -> int:
             
             audio_path = temp_audio
             protocol.emit_progress(100, detail="Audio extracted successfully")
-        
+
+        # Frame count of the audio actually fed to Demucs, taken before the
+        # temp wav of a video job gets deleted. The finished stems must match
+        # it sample for sample after the final resample.
+        source_frames = probe_frame_count(audio_path)
+        if source_frames:
+            protocol.emit_log(f"Source frames: {source_frames}", level="debug")
+
         # Perform separation
         output_paths = separate_audio(
             input_path=audio_path,
@@ -1133,7 +1199,9 @@ def main() -> int:
             resample_outputs_to_rate(
                 output_paths,
                 source_sample_rate,
-                args.ffmpeg_path
+                args.ffmpeg_path,
+                output_format=args.output_format,
+                expected_frames=source_frames
             )
 
         # Success!
