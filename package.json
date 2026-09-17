@@ -99,5 +99,9 @@
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "publish": null
+  },
+  "allowScripts": {
+    "electron@39.3.0": true,
+    "electron-winstaller@5.4.0": true
   }
 }
