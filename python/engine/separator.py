@@ -25,6 +25,7 @@ from .audio_io import (
     WriteResult,
     load_audio,
     make_temp_dir,
+    read_stem,
     remove_temp_dir,
     write_stem,
 )
@@ -109,11 +110,16 @@ def mix_stems(stems: Dict[str, np.ndarray], names: Tuple[str, ...]) -> np.ndarra
 
 
 def build_outputs(stems: Dict[str, np.ndarray], mode: str) -> Dict[str, np.ndarray]:
-    """Map raw model stems to the outputs a processing mode expects."""
+    """
+    Map raw model stems to the outputs that come straight from the model.
+
+    Residual outputs (see ModeSpec.residual_outputs) are NOT built here: they
+    need the source at its own sample rate and are built while writing.
+    """
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}")
     outputs: Dict[str, np.ndarray] = {}
-    for out_name, sources in MODES[mode].items():
+    for out_name, sources in MODES[mode].stem_outputs.items():
         missing = [s for s in sources if s not in stems]
         if missing:
             raise KeyError(f"Model did not produce stems {missing} needed for '{out_name}'")
@@ -122,6 +128,26 @@ def build_outputs(stems: Dict[str, np.ndarray], mode: str) -> Dict[str, np.ndarr
         else:
             outputs[out_name] = mix_stems(stems, sources)
     return outputs
+
+
+def subtract_from_source(
+    source: np.ndarray, written: Dict[str, np.ndarray], names: Tuple[str, ...]
+) -> np.ndarray:
+    """
+    Build a residual output: the source minus the named outputs, in float32.
+
+    Exact reconstruction of the source from the two files is not achievable in
+    float32: fl(v + fl(s - v)) differs from s when |s| << |v|, by at most half
+    an ULP (about -150 dBFS at full scale, below a 24-bit LSB). What IS exact
+    is this subtraction, so instrumental == source - vocals sample for sample.
+    """
+    missing = [n for n in names if n not in written]
+    if missing:
+        raise KeyError(f"Residual output needs outputs {missing}, which were not written")
+    residual = np.array(source, dtype=np.float32, copy=True)
+    for name in names:
+        residual -= written[name]
+    return residual
 
 
 class SeparationEngine:
@@ -379,14 +405,19 @@ class SeparationEngine:
             del stems
 
             job_dir.mkdir(parents=True, exist_ok=True)
+            spec = MODES[mode]
             results: Dict[str, WriteResult] = {}
-            total = len(outputs_arrays)
-            for index, (name, array) in enumerate(outputs_arrays.items()):
+            written_arrays: Dict[str, np.ndarray] = {}
+            total = len(outputs_arrays) + len(spec.residual_outputs)
+            index = 0
+
+            def emit_output(name: str, array: np.ndarray, sr_in: int) -> None:
+                nonlocal index
                 self._check_cancel()
                 path = str(job_dir / f"{name}{FORMATS[fmt].extension}")
                 result = write_stem(
                     array,
-                    model_sr,
+                    sr_in,
                     path,
                     target_sr=audio.samplerate,
                     fmt=fmt,
@@ -404,7 +435,24 @@ class SeparationEngine:
                     f"Wrote {name}: {result.samplerate} Hz {result.subtype}, {result.frames} frames",
                     "info",
                 )
-                progress(STAGE_SEPARATE_END + (1.0 - STAGE_SEPARATE_END) * (index + 1) / total, "saving")
+                index += 1
+                progress(STAGE_SEPARATE_END + (1.0 - STAGE_SEPARATE_END) * index / total, "saving")
+
+            # Pass 1: model stems, resampled to the source rate on the way out.
+            for name, array in outputs_arrays.items():
+                emit_output(name, array, model_sr)
+                if spec.residual_outputs:
+                    # Read back what landed on disk so the residual nulls
+                    # against the delivered file, not against this array.
+                    written_arrays[name] = read_stem(results[name].path, audio.source_frames)
+            del outputs_arrays
+
+            # Pass 2: residuals, already at the source rate (no resample).
+            for name, sources in spec.residual_outputs.items():
+                array = subtract_from_source(audio.data, written_arrays, sources)
+                emit_output(name, array, audio.samplerate)
+                del array
+            del written_arrays
 
             return JobResult(
                 outputs=results,

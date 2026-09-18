@@ -16,6 +16,7 @@ from .audio_io import (
     find_ffmpeg,
     load_audio,
     probe,
+    read_stem,
     write_stem,
 )
 from .presets import (
@@ -26,6 +27,7 @@ from .presets import (
     MODEL_CONFIGS,
     MODES,
     PRESETS,
+    ModeSpec,
     resolve_bit_depth,
 )
 from .separator import (
@@ -37,6 +39,7 @@ from .separator import (
     describe_device,
     mix_stems,
     resolve_device,
+    subtract_from_source,
 )
 
 __all__ = [
@@ -47,6 +50,7 @@ __all__ = [
     "find_ffmpeg",
     "load_audio",
     "probe",
+    "read_stem",
     "write_stem",
     "DEFAULT_FORMAT",
     "DEFAULT_MODE",
@@ -55,6 +59,7 @@ __all__ = [
     "MODEL_CONFIGS",
     "MODES",
     "PRESETS",
+    "ModeSpec",
     "resolve_bit_depth",
     "JobResult",
     "SeparationCancelled",
@@ -64,4 +69,5 @@ __all__ = [
     "describe_device",
     "mix_stems",
     "resolve_device",
+    "subtract_from_source",
 ]

@@ -208,6 +208,19 @@ def fit_frames(data: np.ndarray, expected_frames: Optional[int]) -> Tuple[np.nda
     return data, delta
 
 
+def read_stem(path: str, expected_frames: Optional[int] = None) -> np.ndarray:
+    """
+    Read a written stem back as float32 (frames, channels).
+
+    Residual outputs are built from the bytes that actually landed on disk, so
+    the delivered files null against each other rather than against an
+    in-memory copy that was resampled or dithered on the way out.
+    """
+    data, _ = sf.read(path, dtype="float32", always_2d=True)
+    data, _ = fit_frames(_as_float32_2d(data), expected_frames)
+    return data
+
+
 def expected_subtype(fmt: str, bit_depth: Optional[int]) -> str:
     """The soundfile subtype name a given format/bit depth should produce."""
     if fmt == "mp3":

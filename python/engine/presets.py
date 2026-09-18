@@ -76,20 +76,42 @@ MODEL_CONFIGS: Dict[str, Dict] = {
     },
 }
 
-# Processing modes: output name -> tuple of model stems that are SUMMED to
-# build it. Summation (never averaging) is what makes the stems null against
-# the source: bass + drums + other + vocals ~= mix.
-MODES: Dict[str, Dict[str, Tuple[str, ...]]] = {
-    "vocal_remover": {
-        "vocals": ("vocals",),
-        "instrumental": ("drums", "bass", "other"),
-    },
-    "splitter": {
-        "vocals": ("vocals",),
-        "drums": ("drums",),
-        "bass": ("bass",),
-        "other": ("other",),
-    },
+@dataclass(frozen=True)
+class ModeSpec:
+    """How a processing mode turns model stems into delivered files."""
+
+    name: str
+    # Written straight from the model: output name -> stems that are SUMMED.
+    stem_outputs: Dict[str, Tuple[str, ...]]
+    # Derived at the source sample rate: output name -> stem outputs that are
+    # subtracted from the source.
+    residual_outputs: Dict[str, Tuple[str, ...]]
+    description: str
+
+
+# Wherever stems are combined the rule is summation, never averaging. But the
+# instrumental is not a combination: it is what is left of the source once the
+# vocal is taken out, so it also carries the model's own reconstruction error
+# and the two files null against the source. Summing bass+drums+other leaves
+# that error behind and nulls about 15 dB worse.
+MODES: Dict[str, ModeSpec] = {
+    "vocal_remover": ModeSpec(
+        name="vocal_remover",
+        stem_outputs={"vocals": ("vocals",)},
+        residual_outputs={"instrumental": ("vocals",)},
+        description="2 tracks: vocals from the model, instrumental as source minus vocals",
+    ),
+    "splitter": ModeSpec(
+        name="splitter",
+        stem_outputs={
+            "vocals": ("vocals",),
+            "drums": ("drums",),
+            "bass": ("bass",),
+            "other": ("other",),
+        },
+        residual_outputs={},
+        description="4 tracks straight from the model",
+    ),
 }
 
 DEFAULT_MODE = "vocal_remover"

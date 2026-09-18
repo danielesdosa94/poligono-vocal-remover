@@ -85,6 +85,9 @@ def null_test(input_path: str, result: JobResult, ffmpeg_path) -> dict:
         "residual_rms_dbfs": db(rms),
         "source_peak_dbfs": db(source_peak),
         "stems_sum_peak_dbfs": db(float(np.max(np.abs(total[:frames])))),
+        # Half a float32 ULP at the source peak: the floor a residual output
+        # can reach, since fl(v + fl(s - v)) cannot always return s.
+        "float32_floor_dbfs": db(source_peak * 2 ** -24),
     }
 
 
@@ -163,6 +166,7 @@ def print_summary(args, result: JobResult, null: dict, run_index: int) -> None:
         print(f"    stems sum peak       : {null['stems_sum_peak_dbfs']:.1f} dBFS")
         print(f"    residual peak        : {null['residual_peak_dbfs']:.1f} dBFS")
         print(f"    residual RMS         : {null['residual_rms_dbfs']:.1f} dBFS")
+        print(f"    float32 floor (ref)  : {null['float32_floor_dbfs']:.1f} dBFS (half ULP at source peak)")
     for message in result.warnings:
         print(f"  warning: {message}")
     print(line)

@@ -13,11 +13,13 @@ import pytest
 import soundfile as sf
 
 from engine import (
+    MODES,
     SeparationCancelled,
     build_outputs,
     load_audio,
     mix_stems,
     probe,
+    subtract_from_source,
     write_stem,
 )
 
@@ -59,20 +61,34 @@ def test_mix_stems_is_a_sum_not_an_average():
     assert not np.allclose(mixed, average)
 
 
-def test_build_outputs_vocal_remover_instrumental_is_sum():
+def test_build_outputs_vocal_remover_yields_only_the_model_stem():
+    """The instrumental is a residual, so it is not built from the stems."""
     stems = _fake_stems()
     outputs = build_outputs(stems, "vocal_remover")
-    assert set(outputs) == {"vocals", "instrumental"}
+    assert set(outputs) == {"vocals"}
     np.testing.assert_array_equal(outputs["vocals"], stems["vocals"])
-    np.testing.assert_array_equal(
-        outputs["instrumental"], mix_stems(stems, ("drums", "bass", "other"))
-    )
+    assert MODES["vocal_remover"].residual_outputs == {"instrumental": ("vocals",)}
 
 
-def test_build_outputs_splitter_returns_four_stems():
+def test_subtract_from_source_is_an_exact_float32_difference():
+    rng = np.random.default_rng(11)
+    source = rng.normal(0, 0.3, size=(4096, 2)).astype(np.float32)
+    vocals = rng.normal(0, 0.3, size=(4096, 2)).astype(np.float32)
+    residual = subtract_from_source(source, {"vocals": vocals}, ("vocals",))
+    np.testing.assert_array_equal(residual, (source - vocals).astype(np.float32))
+    assert residual.dtype == np.float32
+
+
+def test_subtract_from_source_rejects_a_missing_dependency():
+    with pytest.raises(KeyError):
+        subtract_from_source(np.zeros((8, 2), np.float32), {}, ("vocals",))
+
+
+def test_build_outputs_splitter_returns_four_stems_unchanged():
     stems = _fake_stems()
     outputs = build_outputs(stems, "splitter")
     assert set(outputs) == {"vocals", "drums", "bass", "other"}
+    assert MODES["splitter"].residual_outputs == {}
     for name in outputs:
         np.testing.assert_array_equal(outputs[name], stems[name])
 
@@ -174,6 +190,22 @@ def test_write_stem_resamples_to_exact_frame_count(tmp_path, ffmpeg_path, fmt, b
     assert abs(np.max(np.abs(back[:, 0])) - 0.25) < 0.01
 
 
+def test_write_stem_dithers_without_resampling(tmp_path, ffmpeg_path):
+    """The path a residual output takes: same rate in and out, integer target."""
+    sr = 48000
+    t = np.arange(sr) / sr
+    tone = (0.25 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    data = np.stack([tone, tone * 0.5], axis=1)
+    result = write_stem(
+        data, sr, str(tmp_path / "same_rate.wav"), target_sr=sr, fmt="wav",
+        bit_depth=24, ffmpeg_path=ffmpeg_path, expected_frames=sr,
+    )
+    assert result.samplerate == sr and result.subtype == "PCM_24"
+    assert result.frames == sr and result.frame_delta == 0
+    back, _ = sf.read(result.path, dtype="float32", always_2d=True)
+    assert abs(np.max(np.abs(back[:, 0])) - 0.25) < 0.01
+
+
 def test_write_stem_rejects_bad_bit_depth(tmp_path):
     data = np.zeros((100, 2), dtype=np.float32)
     with pytest.raises(ValueError):
@@ -204,7 +236,7 @@ def test_separate_file_is_sample_accurate(engine_cpu, make_fixture, tmp_path, sa
     assert result.source_frames == data.shape[0]
     assert result.stats.model_samplerate == 44100
 
-    total = None
+    files = {}
     for name, res in result.outputs.items():
         assert res.samplerate == sr
         assert res.subtype == "FLOAT"
@@ -212,13 +244,27 @@ def test_separate_file_is_sample_accurate(engine_cpu, make_fixture, tmp_path, sa
         assert res.frame_delta == 0
         stem, stem_sr = sf.read(res.path, dtype="float32", always_2d=True)
         assert stem_sr == sr and stem.shape == data.shape
-        total = stem if total is None else total + stem
+        files[name] = stem
 
-    # Mix consistency sanity check: the sum of the written stems must be far
-    # closer to the source than silence is (catches scale/channel/rate bugs).
-    residual_rms = np.sqrt(np.mean(np.square(total - data)))
-    source_rms = np.sqrt(np.mean(np.square(data)))
-    assert residual_rms < 0.5 * source_rms
+    # The reference is the source as the engine read it, not the array the
+    # fixture was generated from: the fixture file is 24-bit, so reading it
+    # back quantizes by 2**-23.
+    source = load_audio(path).data
+
+    # Contract: the instrumental IS the source minus the delivered vocals,
+    # bit for bit. This is the part that is exactly reproducible.
+    np.testing.assert_array_equal(
+        files["instrumental"], (source - files["vocals"]).astype(np.float32)
+    )
+
+    # Summing the two files back reconstructs the source to within one float32
+    # ULP. Exact equality is impossible, not merely unimplemented: for
+    # s = 1e-9 and v = 0.5, fl(s - v) is -0.5 and v + (-0.5) is 0.0, so no
+    # float32 instrumental can reconstruct that sample.
+    recon = (files["vocals"] + files["instrumental"]).astype(np.float64)
+    error = float(np.max(np.abs(recon - source.astype(np.float64))))
+    scale = max(float(np.max(np.abs(source))), float(np.max(np.abs(files["vocals"]))))
+    assert error <= 2 ** -23 * scale, f"reconstruction error {error:.3e} exceeds one ULP"
 
     fractions = [f for f, _ in progress]
     assert fractions == sorted(fractions)
