@@ -1,19 +1,31 @@
 """
 Protocol Module - JSON Communication with Electron
 ===================================================
-Handles all communication between Python motor and Electron main process.
-All messages are JSON objects sent line-by-line through stdout.
+Handles all communication between the Python motor and the Electron main
+process. Every message is a single-line JSON object written to stdout.
+
+The daemon runs one Protocol instance per job (bound to that job's id) plus a
+job-less instance for session events (ready, pong, command errors). All of
+them share one write lock so lines never interleave between threads.
 """
 
 import json
 import sys
-from enum import Enum
-from typing import Optional, Dict, Any
+import threading
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, Optional
+
+# Bump when the command/event contract changes in a way Electron must know about.
+PROTOCOL_VERSION = 2
+
+_WRITE_LOCK = threading.Lock()
 
 
 class EventType(Enum):
-    """Event types for the communication protocol."""
+    """Event types for the communication protocol (motor -> Electron)."""
+    READY = "ready"
+    PONG = "pong"
     START = "start"
     PROGRESS = "progress"
     STEP_CHANGE = "step_change"
@@ -37,13 +49,14 @@ class ProcessingStep(Enum):
 
 class Protocol:
     """
-    Handles JSON protocol communication with Electron.
-    
-    All output goes to stdout as single-line JSON objects.
-    Electron reads these line-by-line and parses them.
+    JSON protocol emitter.
+
+    All output goes to stdout as single-line JSON objects, flushed immediately.
+    Every event carries "jobId" (None for session-level events).
     """
-    
-    def __init__(self):
+
+    def __init__(self, job_id: Optional[str] = None):
+        self.job_id = job_id
         self._start_time: Optional[datetime] = None
         self._current_step: Optional[ProcessingStep] = None
         self._total_steps: int = 6
@@ -56,27 +69,49 @@ class Protocol:
             ProcessingStep.SAVING: 0.04,
             ProcessingStep.CLEANUP: 0.01,
         }
-    
+
     def _emit(self, event_type: EventType, data: Dict[str, Any]) -> None:
         """
         Emit a JSON message to stdout.
-        
-        Each message is a single line to make parsing reliable.
-        flush=True ensures immediate delivery to Electron.
+
+        Each message is a single line so parsing stays trivial; flush=True so
+        Electron sees it immediately. A dead stdout pipe (parent gone) is
+        swallowed: the watchdog / stdin EOF path takes care of exiting.
         """
         message = {
             "event": event_type.value,
+            "jobId": self.job_id,
             "timestamp": datetime.now().isoformat(),
-            **data
+            **data,
         }
-        
         try:
-            print(json.dumps(message, ensure_ascii=False), flush=True)
-        except Exception as e:
-            # Fallback: if JSON encoding fails, send error as plain text
-            fallback = {"event": "error", "message": f"Protocol error: {str(e)}"}
-            print(json.dumps(fallback), flush=True)
-    
+            line = json.dumps(message, ensure_ascii=False)
+        except (TypeError, ValueError) as exc:
+            line = json.dumps({
+                "event": EventType.ERROR.value,
+                "jobId": self.job_id,
+                "message": f"Protocol error: {exc}",
+                "code": "PROTOCOL_ERROR",
+                "fatal": False,
+            })
+        with _WRITE_LOCK:
+            try:
+                sys.stdout.write(line + "\n")
+                sys.stdout.flush()
+            except (OSError, ValueError):
+                pass
+
+    # ------------------------------------------------------------ session
+
+    def emit_ready(self, info: Dict[str, Any]) -> None:
+        """Signal that the daemon is up and accepting commands."""
+        self._emit(EventType.READY, {"protocolVersion": PROTOCOL_VERSION, **info})
+
+    def emit_pong(self) -> None:
+        self._emit(EventType.PONG, {})
+
+    # ---------------------------------------------------------------- job
+
     def emit_start(self, file_path: str, file_type: str, model: str, device: str) -> None:
         """Signal that processing has started."""
         self._start_time = datetime.now()
@@ -85,9 +120,9 @@ class Protocol:
             "fileType": file_type,  # "audio" or "video"
             "model": model,
             "device": device,
-            "totalSteps": self._total_steps
+            "totalSteps": self._total_steps,
         })
-    
+
     def emit_step_change(self, step: ProcessingStep, step_number: int) -> None:
         """Signal transition to a new processing step."""
         self._current_step = step
@@ -95,108 +130,100 @@ class Protocol:
             "step": step.value,
             "stepNumber": step_number,
             "totalSteps": self._total_steps,
-            "stepWeight": self._step_weights.get(step, 0.1)
+            "stepWeight": self._step_weights.get(step, 0.1),
         })
-    
+
     def emit_progress(
         self,
         step_percent: float,
         global_percent: Optional[float] = None,
         eta_seconds: Optional[int] = None,
-        detail: Optional[str] = None
+        detail: Optional[str] = None,
     ) -> None:
         """
-        Emit progress update.
-        
+        Emit a progress update.
+
         Args:
-            step_percent: Progress within current step (0-100)
-            global_percent: Overall progress (0-100), calculated if not provided
+            step_percent: Progress within the current step (0-100)
+            global_percent: Overall job progress (0-100), if known
             eta_seconds: Estimated time remaining in seconds
-            detail: Optional detail message (e.g., "Processing chunk 3/10")
+            detail: Optional detail message
         """
         data = {
             "stepPercent": round(step_percent, 1),
-            "globalPercent": round(global_percent, 1) if global_percent else None,
+            "globalPercent": round(global_percent, 1) if global_percent is not None else None,
             "currentStep": self._current_step.value if self._current_step else None,
         }
-        
         if eta_seconds is not None:
             data["etaSeconds"] = eta_seconds
-        
         if detail:
             data["detail"] = detail
-        
         self._emit(EventType.PROGRESS, data)
-    
+
     def emit_log(self, message: str, level: str = "info") -> None:
-        """Emit a log message (for debugging, shown in console)."""
-        self._emit(EventType.LOG, {
-            "message": message,
-            "level": level  # "debug", "info", "verbose"
-        })
-    
+        """Emit a log message (shown in the app's debug console)."""
+        self._emit(EventType.LOG, {"message": message, "level": level})
+
     def emit_warning(self, message: str, code: Optional[str] = None) -> None:
         """Emit a warning (non-fatal issue)."""
-        data = {"message": message}
+        data: Dict[str, Any] = {"message": message}
         if code:
             data["code"] = code
         self._emit(EventType.WARNING, data)
-    
+
     def emit_error(self, message: str, code: Optional[str] = None, fatal: bool = True) -> None:
         """
         Emit an error.
-        
+
         Args:
             message: Human-readable error message
-            code: Machine-readable error code (e.g., "FILE_NOT_FOUND")
-            fatal: Whether this error stops processing
+            code: Machine-readable error code (e.g. "FILE_NOT_FOUND")
+            fatal: True when this error ends the job
         """
-        elapsed = None
-        if self._start_time:
-            elapsed = (datetime.now() - self._start_time).total_seconds()
-        
         self._emit(EventType.ERROR, {
             "message": message,
             "code": code,
             "fatal": fatal,
-            "elapsedSeconds": elapsed
+            "elapsedSeconds": self._elapsed(),
         })
-    
-    def emit_success(self, output_paths: Dict[str, str], stats: Optional[Dict] = None) -> None:
+
+    def emit_success(
+        self,
+        output_paths: Dict[str, str],
+        stats: Optional[Dict] = None,
+        output_dir: Optional[str] = None,
+    ) -> None:
         """
         Signal successful completion.
-        
+
         Args:
-            output_paths: Dict of output type to file path
-                         e.g., {"vocals": "/path/vocals.wav", "instrumental": "/path/inst.wav"}
+            output_paths: Output name -> file path
             stats: Optional processing statistics
+            output_dir: Folder that holds the outputs (so the UI never has to
+                derive it from a file path)
         """
-        elapsed = None
-        if self._start_time:
-            elapsed = (datetime.now() - self._start_time).total_seconds()
-        
-        data = {
+        data: Dict[str, Any] = {
             "outputs": output_paths,
-            "elapsedSeconds": elapsed
+            "outputDir": output_dir,
+            "elapsedSeconds": self._elapsed(),
         }
-        
         if stats:
             data["stats"] = stats
-        
         self._emit(EventType.SUCCESS, data)
-    
+
     def emit_cancelled(self, reason: str = "User requested cancellation") -> None:
         """Signal that processing was cancelled."""
-        elapsed = None
-        if self._start_time:
-            elapsed = (datetime.now() - self._start_time).total_seconds()
-        
         self._emit(EventType.CANCELLED, {
             "reason": reason,
-            "elapsedSeconds": elapsed,
-            "lastStep": self._current_step.value if self._current_step else None
+            "elapsedSeconds": self._elapsed(),
+            "lastStep": self._current_step.value if self._current_step else None,
         })
 
+    def _elapsed(self) -> Optional[float]:
+        if self._start_time is None:
+            return None
+        return (datetime.now() - self._start_time).total_seconds()
 
-# Global protocol instance
+
+# Job-less instance for callers that only need session-level events.
 protocol = Protocol()

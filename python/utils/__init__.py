@@ -1,26 +1,15 @@
 """
 Utils Package
 =============
-Utility modules for the Vocal Remover motor.
+Shared helpers for the motor daemon.
 """
 
-from .protocol import Protocol, protocol, EventType, ProcessingStep
-from .signal_handler import (
-    SignalHandler, 
-    signal_handler, 
-    CancellationToken, 
-    CancelledException,
-    ShutdownReason
-)
+from .protocol import PROTOCOL_VERSION, EventType, ProcessingStep, Protocol, protocol
 
 __all__ = [
-    'Protocol',
-    'protocol',
-    'EventType', 
-    'ProcessingStep',
-    'SignalHandler',
-    'signal_handler',
-    'CancellationToken',
-    'CancelledException',
-    'ShutdownReason'
+    "PROTOCOL_VERSION",
+    "Protocol",
+    "protocol",
+    "EventType",
+    "ProcessingStep",
 ]

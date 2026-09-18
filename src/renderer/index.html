@@ -549,40 +549,45 @@
                 logConsole(`Processing: ${job.file.name}`);
 
                 try {
-                    // Get global settings
+                    // Global settings. The quality select maps to the motor's
+                    // preset; the model select is an optional override.
                     const options = {
                         mode: elements.optMode.value,
+                        preset: elements.optQuality.value,
                         model: elements.optModel.value,
-                        quality: elements.optQuality.value,
                         device: elements.optDevice.value,
-                        outputFormat: elements.optFormat.value,
+                        format: elements.optFormat.value,
                     };
 
-                    // Start motor
-                    const result = await ipcRenderer.invoke('motor:start', {
+                    // One invoke per job: the promise settles with the
+                    // motor's terminal event (success / error / cancelled).
+                    // Progress arrives through the motor:* listeners below.
+                    const result = await ipcRenderer.invoke('motor:run', {
                         inputPath: job.file.path,
-                        outputDir: null, // Use same directory as input
+                        outputDir: null, // Same directory as the input
                         options
                     });
 
-                    if (!result.success) {
-                        throw new Error(result.error || 'Unknown error');
+                    const dict = translations[currentLanguage] || translations['en'];
+
+                    if (result.status === 'success') {
+                        logConsole(interpolate(dict.console_job_completed, { id: job.id }));
+                        updateJob(job.id, {
+                            status: 'completed',
+                            progress: 100,
+                            detail: `✅ ${interpolate(dict.job_completed, { time: result.elapsedSeconds?.toFixed(1) })}`,
+                            outputPath: result.outputDir || null,
+                        });
+                    } else if (result.status === 'cancelled') {
+                        logConsole(interpolate(dict.console_job_cancelled, { id: job.id }));
+                        updateJob(job.id, {
+                            status: 'error',
+                            detail: dict.job_cancelled,
+                            error: 'Cancelled',
+                        });
+                    } else {
+                        throw new Error(result.message || 'Unknown error');
                     }
-
-                    // Wait for completion (motor events will update progress)
-                    // The motor will send 'motor:success' or 'motor:error' event
-                    // which will be handled by event listeners below
-
-                    // Wait for job to finish (status changes from 'processing')
-                    await new Promise((resolve) => {
-                        const checkInterval = setInterval(() => {
-                            const currentJob = state.queue.find(j => j.id === job.id);
-                            if (currentJob && currentJob.status !== 'processing') {
-                                clearInterval(checkInterval);
-                                resolve();
-                            }
-                        }, 500);
-                    });
 
                 } catch (error) {
                     logConsole(`Error processing ${job.file.name}: ${error.message}`, 'error');
@@ -599,11 +604,6 @@
                 if (!state.isProcessing) {
                     break;
                 }
-
-                // CRITICAL: Wait 1 second before starting next job to prevent race condition
-                // This gives the main process time to cleanup properly
-                logConsole('Waiting 1s before next job...');
-                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
             state.isProcessing = false;
@@ -688,6 +688,13 @@
         // Motor Event Listeners
         // =================================================================
 
+        ipcRenderer.on('motor:ready', (event, data) => {
+            const gpu = data.cuda && data.cuda.available
+                ? `${data.cuda.name} (${data.cuda.vramGb} GB)`
+                : 'CPU only';
+            logConsole(`Separation engine ready: ${gpu}, torch ${data.torch}`);
+        });
+
         ipcRenderer.on('motor:start', (event, data) => {
             if (state.currentJobId) {
                 logConsole(`Motor started for job ${state.currentJobId}: ${data.model} on ${data.device}`);
@@ -704,15 +711,14 @@
 
         ipcRenderer.on('motor:progress', (event, data) => {
             if (state.currentJobId) {
-                // The motor already maps Demucs 0-100% into its own band, so
-                // this value goes straight to the bar. Scaling it again here
-                // capped the bar at 81%.
-                const scaledProgress = Math.round(data.stepPercent || data.globalPercent || 0);
+                // The motor reports whole-job progress (0-100); it goes
+                // straight to the bar.
+                const percent = Math.round(data.globalPercent ?? data.stepPercent ?? 0);
 
                 const dict = translations[currentLanguage] || translations['en'];
                 updateJob(state.currentJobId, {
-                    progress: scaledProgress,
-                    detail: interpolate(dict.job_processing_ai, { progress: scaledProgress }),
+                    progress: percent,
+                    detail: interpolate(dict.job_processing_ai, { progress: percent }),
                 });
             }
         });
@@ -725,51 +731,10 @@
             logConsole(`⚠️ ${data.message}`, 'warn');
         });
 
+        // Job outcome (success / error / cancelled) is handled by the result
+        // of the motor:run invoke in processQueue(); these listeners only log.
         ipcRenderer.on('motor:error', (event, data) => {
             logConsole(`Error: ${data.message}`, 'error');
-
-            if (data.fatal && state.currentJobId) {
-                updateJob(state.currentJobId, {
-                    status: 'error',
-                    detail: `Error: ${data.message}`,
-                    error: data.message,
-                });
-            }
-        });
-
-        ipcRenderer.on('motor:success', (event, data) => {
-            if (state.currentJobId) {
-                const dict = translations[currentLanguage] || translations['en'];
-                logConsole(interpolate(dict.console_job_completed, { id: state.currentJobId }));
-
-                // Get output path from first output file
-                let outputPath = null;
-                if (data.outputs) {
-                    const firstOutput = Object.values(data.outputs)[0];
-                    if (firstOutput) {
-                        outputPath = path.dirname(firstOutput);
-                    }
-                }
-
-                // Force progress to 100% when files are saved
-                updateJob(state.currentJobId, {
-                    status: 'completed',
-                    progress: 100,
-                    detail: `✅ ${interpolate(dict.job_completed, { time: data.elapsedSeconds?.toFixed(1) })}`,
-                    outputPath: outputPath,
-                });
-            }
-        });
-
-        ipcRenderer.on('motor:cancelled', (event, data) => {
-            if (state.currentJobId) {
-                logConsole(`Job ${state.currentJobId} cancelled`);
-                updateJob(state.currentJobId, {
-                    status: 'error',
-                    detail: 'Cancelled by user',
-                    error: 'Cancelled',
-                });
-            }
         });
 
         // =================================================================
