@@ -23,7 +23,7 @@
   "build": {
     "appId": "com.poligonostudio.aihub",
     "productName": "Polígono AI Hub",
-    "copyright": "Copyright © 2024 Polígono Studio",
+    "copyright": "Copyright © 2026 Polígono Studio",
     "directories": {
       "output": "release",
       "buildResources": "build"

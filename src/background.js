@@ -462,9 +462,10 @@ function createWindow() {
         backgroundColor: CONFIG.window.backgroundColor,
         icon: path.join(__dirname, 'assets', 'icon.png'),
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            // Phase 3: contextIsolation + preload
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            preload: path.join(__dirname, 'preload.js'),
         },
         show: false,
     });
