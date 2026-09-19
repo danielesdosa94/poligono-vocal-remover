@@ -134,6 +134,25 @@ bridge.onMotorEvent('ready', (data) => {
         ? `${data.cuda.name} (${data.cuda.vramGb} GB)`
         : 'CPU only';
     logConsole(`Separation engine ready: ${gpu}, torch ${data.torch}`);
+    // The motor is the authority on presets and formats; adopt its tables so
+    // the labels and the bit depth choices cannot drift from the engine.
+    adoptMotorCapabilities(data);
+});
+
+// Model weights being fetched on first use. Without this the bar would sit
+// frozen on "Loading model" for a 1 GB download.
+bridge.onMotorEvent('download', (data) => {
+    if (!state.currentJobId) return;
+    const dict = getDict();
+    updateJob(state.currentJobId, {
+        progress: Math.round(data.percent ?? 0),
+        detail: interpolate(dict.job_downloading_model, {
+            index: data.fileIndex,
+            count: data.fileCount,
+            done: formatBytes(data.bytesDone),
+            total: formatBytes(data.bytesTotal),
+        }),
+    });
 });
 
 bridge.onMotorEvent('start', (data) => {
@@ -170,6 +189,12 @@ bridge.onMotorEvent('log', (data) => {
 
 bridge.onMotorEvent('warning', (data) => {
     logConsole(`⚠️ ${data.message}`, 'warn');
+    // Anything that changes what the client actually receives (a 5.1 downmix,
+    // a mono source) belongs on the job row too.
+    const job = state.queue.find(j => j.id === state.currentJobId);
+    if (job && !job.warnings.includes(data.message)) {
+        updateJob(job.id, { warnings: [...job.warnings, data.message] });
+    }
 });
 
 // Job outcome (success / error / cancelled) is handled by the result of
@@ -198,6 +223,7 @@ elements.navTabs.forEach((tab, index) => {
             currentMode = 'vocal_remover';
             showView('queue');
             elements.optMode.value = 'vocal_remover';
+            updateSettings({ mode: 'vocal_remover' });
             elements.modeDescription.textContent = dict.mode_vocal_remover_subtitle;
             elements.modeDescription.setAttribute('data-i18n', 'mode_vocal_remover_subtitle');
             logConsole(dict.console_mode_switched_vocal);
@@ -206,6 +232,7 @@ elements.navTabs.forEach((tab, index) => {
             currentMode = 'splitter';
             showView('queue');
             elements.optMode.value = 'splitter';
+            updateSettings({ mode: 'splitter' });
             elements.modeDescription.textContent = dict.mode_splitter_subtitle;
             elements.modeDescription.setAttribute('data-i18n', 'mode_splitter_subtitle');
             logConsole(dict.console_mode_switched_splitter);
@@ -223,24 +250,84 @@ elements.navTabs.forEach((tab, index) => {
 // Settings Synchronization
 // =====================================================================
 
-// Sync settings panel controls with hidden controls
-elements.settingsModel.addEventListener('change', () => {
-    elements.optModel.value = elements.settingsModel.value;
+// Every control writes straight back to the persisted settings, and the
+// mirrored hidden select is refreshed by applySettingsToControls().
+
+elements.settingsModel.addEventListener('change', async () => {
+    await updateSettings({ model: elements.settingsModel.value });
     logConsole(`AI Model changed to: ${elements.settingsModel.value}`);
 });
 
-elements.settingsQuality.addEventListener('change', () => {
-    elements.optQuality.value = elements.settingsQuality.value;
+elements.settingsQuality.addEventListener('change', async () => {
+    await updateSettings({ preset: elements.settingsQuality.value });
     logConsole(`Quality changed to: ${elements.settingsQuality.value}`);
 });
 
-elements.settingsDevice.addEventListener('change', () => {
-    elements.optDevice.value = elements.settingsDevice.value;
+elements.settingsDevice.addEventListener('change', async () => {
+    await updateSettings({ device: elements.settingsDevice.value });
     logConsole(`Device changed to: ${elements.settingsDevice.value}`);
 });
 
-elements.settingsLanguage.addEventListener('change', () => {
-    updateLanguage(elements.settingsLanguage.value);
+elements.settingsLanguage.addEventListener('change', async () => {
+    const language = elements.settingsLanguage.value;
+    await updateSettings({ language });
+    updateLanguage(language);
+});
+
+elements.settingsMono.addEventListener('change', async () => {
+    const monoOutput = elements.settingsMono.value === 'true';
+    await updateSettings({ monoOutput });
+    logConsole(`Mono sources: ${monoOutput ? 'mono output' : 'dual-mono stereo'}`);
+});
+
+elements.settingsChunk.addEventListener('change', async () => {
+    const chunkMinutes = Number(elements.settingsChunk.value);
+    await updateSettings({ chunkMinutes });
+    logConsole(chunkMinutes > 0
+        ? `Long files: ${chunkMinutes} minute blocks`
+        : 'Long files: chunking disabled');
+});
+
+// =====================================================================
+// Output Settings (left panel)
+// =====================================================================
+
+elements.optFormat.addEventListener('change', async () => {
+    await updateSettings({ format: elements.optFormat.value });
+    logConsole(`Output format: ${elements.optFormat.value}`);
+});
+
+elements.optBitDepth.addEventListener('change', async () => {
+    const depth = Number(elements.optBitDepth.value);
+    const key = elements.optFormat.value === 'flac' ? 'flacBitDepth' : 'wavBitDepth';
+    await updateSettings({ [key]: depth });
+    logConsole(`Bit depth: ${depth === 32 ? '32-bit float' : `${depth}-bit`}`);
+});
+
+elements.optOutputMode.addEventListener('change', async () => {
+    const mode = elements.optOutputMode.value;
+    if (mode === 'folder' && !(getSettings() || {}).outputDir) {
+        // Nothing chosen yet: ask straight away instead of leaving the app in
+        // a state where "custom folder" means "no folder".
+        await chooseOutputFolder();
+        return;
+    }
+    await updateSettings({ outputMode: mode });
+});
+
+async function chooseOutputFolder() {
+    const result = await bridge.chooseOutputDir();
+    if (result.canceled) {
+        // Put the control back to whatever is actually in effect.
+        applySettingsToControls();
+        return;
+    }
+    await updateSettings({});
+    logConsole(`Output folder: ${result.settings.outputDir}`);
+}
+
+elements.btnChooseOutput.addEventListener('click', () => {
+    chooseOutputFolder();
 });
 
 // =====================================================================
@@ -273,15 +360,30 @@ document.addEventListener('dragenter', (e) => {
 // =====================================================================
 
 setupLogoFallback();
-
-// Initialize settings panel with current values
-elements.settingsModel.value = elements.optModel.value;
-elements.settingsQuality.value = elements.optQuality.value;
-elements.settingsDevice.value = elements.optDevice.value;
-elements.settingsLanguage.value = currentLanguage;
-
-// Apply saved language on startup
-updateLanguage(currentLanguage);
-
-logConsole(getDict().console_queue_initialized);
 updateQueueStats();
+
+// Settings come from disk (src/settings.js in the main process), so the app
+// opens exactly as it was closed. Everything the controls need is applied in
+// there, including the language.
+initSettings()
+    .then(() => {
+        // The mode is persisted, so the matching tab has to be the active one.
+        const tabIndex = getSettings().mode === 'splitter' ? 1 : 0;
+        currentMode = getSettings().mode;
+        elements.navTabs.forEach((tab, index) => {
+            tab.classList.toggle('active', index === tabIndex);
+        });
+        const dict = getDict();
+        elements.modeDescription.textContent = currentMode === 'splitter'
+            ? dict.mode_splitter_subtitle
+            : dict.mode_vocal_remover_subtitle;
+        logConsole(dict.console_settings_loaded);
+    })
+    .catch((error) => {
+        logConsole(`Could not load settings, using defaults: ${error.message}`, 'error');
+        updateLanguage(currentLanguage);
+    })
+    .finally(() => {
+        logConsole(getDict().console_queue_initialized);
+        updateQueueStats();
+    });

@@ -46,6 +46,7 @@ const translations = {
         job_waiting: 'Waiting...',
         job_initializing: 'Initializing...',
         job_processing_ai: 'Processing AI: {progress}%',
+        job_downloading_model: 'Downloading model {index}/{count}: {done} of {total}',
         job_completed: 'Completed in {time}s',
         job_error: 'Error: {message}',
         job_cancelled: 'Cancelled by user',
@@ -75,10 +76,7 @@ const translations = {
         // Settings - Quality Card
         settings_quality_title: 'Processing Quality',
         settings_quality_label: 'Quality Level',
-        settings_quality_option_fast: 'Fast (1 shift)',
-        settings_quality_option_hq: 'High Quality (2 shifts)',
-        settings_quality_option_ultra: 'Ultra Quality (5 shifts)',
-        settings_quality_description: 'Higher quality uses multiple processing passes for better separation.',
+        settings_quality_description: 'The multiplier is processing time relative to Fast. Ultra runs the fine-tuned bag of 4 models twice, with 50% segment overlap.',
 
         // Settings - Device Card
         settings_device_title: 'Hardware Device',
@@ -87,6 +85,43 @@ const translations = {
         settings_device_option_cuda: 'GPU (CUDA)',
         settings_device_option_cpu: 'CPU Only',
         settings_device_description: 'GPU acceleration (CUDA) is significantly faster if available.',
+
+        // Settings - Long Files Card
+        settings_long_files_title: 'Long Files',
+        settings_chunk_label: 'Block Length',
+        settings_chunk_off: 'Off (whole file in one pass)',
+        settings_chunk_2: '2 minutes (lowest RAM)',
+        settings_chunk_3: '3 minutes (recommended)',
+        settings_chunk_6: '6 minutes',
+        settings_chunk_12: '12 minutes (fewest joins)',
+        settings_chunk_description: 'Files over 12 minutes are separated in blocks that overlap by 2 seconds and are joined with a linear crossfade; shorter files are untouched. On a 90 minute file, 3 minute blocks peak at about 6 GB of RAM and 12 minute blocks at about 8.5 GB, for the same processing time. The join is sample-accurate at every setting.',
+
+        // Settings - Channels Card
+        settings_channels_title: 'Channels',
+        settings_mono_label: 'Mono Sources',
+        settings_mono_dual: 'Deliver dual-mono stereo',
+        settings_mono_mono: 'Deliver mono',
+        settings_channels_description: 'Sources with more than 2 channels (5.1) are always downmixed to stereo. For dialogue, extract the centre channel first.',
+
+        // Output Settings - Bit Depth
+        settings_bit_depth: 'Bit Depth',
+        settings_bit_depth_hint: '32-bit float keeps the chain lossless. 24 and 16 are dithered.',
+        bit_depth_32: '32-bit float (no quantisation)',
+        bit_depth_int: '{depth}-bit (dithered)',
+
+        // Output Settings - Output Folder
+        settings_output_folder: 'Output Folder',
+        settings_output_beside: 'Next to the original file',
+        settings_output_folder_custom: 'Choose a folder...',
+        settings_output_beside_short: 'Next to the original',
+        settings_output_browse: 'Browse',
+        settings_output_not_set: 'No folder chosen',
+
+        // Quality presets. The multiplier is time relative to "fast".
+        preset_label: '{name} — {cost}× time',
+        preset_name_fast: 'Fast',
+        preset_name_hq: 'High Quality',
+        preset_name_ultra: 'Ultra',
 
         // Settings - Language Card
         settings_language_title: 'Language / Idioma',
@@ -114,6 +149,7 @@ const translations = {
         console_mode_switched_vocal: 'Switched to Vocal Remover mode',
         console_mode_switched_splitter: 'Switched to Stem Splitter mode',
         console_settings_opened: 'Opened Settings panel',
+        console_settings_loaded: 'Settings restored from your last session',
         console_model_changed: 'AI Model changed to: {value}',
         console_quality_changed: 'Quality changed to: {value}',
         console_device_changed: 'Device changed to: {value}',
@@ -164,6 +200,7 @@ const translations = {
         job_waiting: 'Esperando...',
         job_initializing: 'Inicializando...',
         job_processing_ai: 'Procesando IA: {progress}%',
+        job_downloading_model: 'Descargando modelo {index}/{count}: {done} de {total}',
         job_completed: 'Completado en {time}s',
         job_error: 'Error: {message}',
         job_cancelled: 'Cancelado por el usuario',
@@ -193,9 +230,6 @@ const translations = {
         // Settings - Quality Card
         settings_quality_title: 'Calidad de Procesamiento',
         settings_quality_label: 'Nivel de Calidad',
-        settings_quality_option_fast: 'Rápido (1 turno)',
-        settings_quality_option_hq: 'Alta Calidad (2 turnos)',
-        settings_quality_option_ultra: 'Calidad Ultra (5 turnos)',
         settings_quality_description: 'Mayor calidad utiliza múltiples pases de procesamiento para mejor separación.',
 
         // Settings - Device Card
@@ -205,6 +239,43 @@ const translations = {
         settings_device_option_cuda: 'GPU (CUDA)',
         settings_device_option_cpu: 'Solo CPU',
         settings_device_description: 'La aceleración GPU (CUDA) es significativamente más rápida si está disponible.',
+
+        // Settings - Long Files Card
+        settings_long_files_title: 'Archivos Largos',
+        settings_chunk_label: 'Longitud del Bloque',
+        settings_chunk_off: 'Desactivado (archivo entero de una pasada)',
+        settings_chunk_2: '2 minutos (menos RAM)',
+        settings_chunk_3: '3 minutos (recomendado)',
+        settings_chunk_6: '6 minutos',
+        settings_chunk_12: '12 minutos (menos uniones)',
+        settings_chunk_description: 'Los archivos de más de 12 minutos se separan en bloques que se solapan 2 segundos y se unen con un crossfade lineal; los más cortos no se tocan. En un archivo de 90 minutos, los bloques de 3 minutos llegan a unos 6 GB de RAM y los de 12 minutos a unos 8,5 GB, en el mismo tiempo de proceso. La unión es exacta al sample en cualquier ajuste.',
+
+        // Settings - Channels Card
+        settings_channels_title: 'Canales',
+        settings_mono_label: 'Fuentes Mono',
+        settings_mono_dual: 'Entregar estéreo dual-mono',
+        settings_mono_mono: 'Entregar mono',
+        settings_channels_description: 'Las fuentes de más de 2 canales (5.1) siempre se mezclan a estéreo. Para diálogo, extrae antes el canal central.',
+
+        // Output Settings - Bit Depth
+        settings_bit_depth: 'Profundidad de Bits',
+        settings_bit_depth_hint: '32 bits flotante no cuantiza nada. 24 y 16 llevan dither.',
+        bit_depth_32: '32 bits flotante (sin cuantización)',
+        bit_depth_int: '{depth} bits (con dither)',
+
+        // Output Settings - Output Folder
+        settings_output_folder: 'Carpeta de Salida',
+        settings_output_beside: 'Junto al archivo original',
+        settings_output_folder_custom: 'Elegir una carpeta...',
+        settings_output_beside_short: 'Junto al original',
+        settings_output_browse: 'Examinar',
+        settings_output_not_set: 'Sin carpeta elegida',
+
+        // Quality presets. El multiplicador es tiempo relativo a "rápido".
+        preset_label: '{name} — {cost}× tiempo',
+        preset_name_fast: 'Rápido',
+        preset_name_hq: 'Alta Calidad',
+        preset_name_ultra: 'Ultra',
 
         // Settings - Language Card
         settings_language_title: 'Language / Idioma',
@@ -232,6 +303,7 @@ const translations = {
         console_mode_switched_vocal: 'Cambiado a modo Separar Voces',
         console_mode_switched_splitter: 'Cambiado a modo Separador Stems',
         console_settings_opened: 'Panel de Configuración abierto',
+        console_settings_loaded: 'Ajustes restaurados de tu última sesión',
         console_model_changed: 'Modelo IA cambiado a: {value}',
         console_quality_changed: 'Calidad cambiada a: {value}',
         console_device_changed: 'Dispositivo cambiado a: {value}',

@@ -71,11 +71,34 @@
                         </select>
                     </div>
 
-                    <!-- Hidden controls for advanced settings -->
+                    <!-- Bit depth: the choices depend on the format, so the
+                         options are rebuilt in js/settings.js. -->
+                    <div class="form-group" id="group-bit-depth">
+                        <label class="form-label" data-i18n="settings_bit_depth">Bit Depth</label>
+                        <select id="opt-bit-depth" class="form-select"></select>
+                        <p class="form-hint" id="bit-depth-hint" data-i18n="settings_bit_depth_hint">
+                            32-bit float keeps the chain lossless. 24 and 16 are dithered.
+                        </p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" data-i18n="settings_output_folder">Output Folder</label>
+                        <select id="opt-output-mode" class="form-select">
+                            <option value="beside" data-i18n="settings_output_beside">Next to the original file</option>
+                            <option value="folder" data-i18n="settings_output_folder_custom">Choose a folder...</option>
+                        </select>
+                        <div class="output-dir-row">
+                            <span id="output-dir-path" class="output-dir-path" data-i18n="settings_output_beside_short">Next to the original</span>
+                            <button id="btn-choose-output" class="btn btn-secondary btn-small" data-i18n="settings_output_browse">Browse</button>
+                        </div>
+                    </div>
+
+                    <!-- Hidden controls kept as the single source the queue
+                         reads from; the visible panel writes into them. -->
                     <select id="opt-model" class="form-select hidden">
                         <option value="htdemucs_ft" selected>Demucs v4 FT (Best)</option>
                         <option value="htdemucs">Demucs v4 Standard</option>
-                        <option value="mdx_extra">MDX-Net (Fast)</option>
+                        <option value="mdx_extra">MDX-Net Extra</option>
                     </select>
 
                     <select id="opt-device" class="form-select hidden">
@@ -85,9 +108,9 @@
                     </select>
 
                     <select id="opt-quality" class="form-select hidden">
-                        <option value="fast">Fast (1 shift)</option>
-                        <option value="hq" selected>High (2 shifts)</option>
-                        <option value="ultra">Ultra (5 shifts)</option>
+                        <option value="fast">Fast</option>
+                        <option value="hq" selected>High Quality</option>
+                        <option value="ultra">Ultra</option>
                     </select>
 
                     <select id="opt-mode" class="form-select hidden">
@@ -192,13 +215,14 @@
                             <div class="form-group">
                                 <label class="form-label" data-i18n="settings_quality_label">Quality Level</label>
                                 <select id="settings-quality" class="form-select">
-                                    <option value="fast" data-i18n="settings_quality_option_fast">Fast (1 shift)</option>
-                                    <option value="hq" selected data-i18n="settings_quality_option_hq">High Quality (2 shifts)</option>
-                                    <option value="ultra" data-i18n="settings_quality_option_ultra">Ultra Quality (5 shifts)</option>
+                                    <option value="fast">Fast — 1× time</option>
+                                    <option value="hq" selected>High Quality — 4× time</option>
+                                    <option value="ultra">Ultra — 16× time</option>
                                 </select>
                             </div>
                             <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;" data-i18n="settings_quality_description">
-                                Higher quality uses multiple processing passes for better separation.
+                                The multiplier is processing time relative to Fast. Ultra runs the
+                                fine-tuned bag of 4 models twice, with 50% segment overlap.
                             </p>
                         </div>
 
@@ -219,6 +243,48 @@
                                 GPU acceleration (CUDA) is significantly faster if available.
                             </p>
                         </div>
+
+                        <!-- Long Files Card -->
+                        <div class="settings-card">
+                            <div class="settings-card__title">
+                                <i class="fas fa-scissors"></i> <span data-i18n="settings_long_files_title">Long Files</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" data-i18n="settings_chunk_label">Block Length</label>
+                                <select id="settings-chunk" class="form-select">
+                                    <option value="0" data-i18n="settings_chunk_off">Off (whole file in one pass)</option>
+                                    <option value="2" data-i18n="settings_chunk_2">2 minutes (lowest RAM)</option>
+                                    <option value="3" selected data-i18n="settings_chunk_3">3 minutes (recommended)</option>
+                                    <option value="6" data-i18n="settings_chunk_6">6 minutes</option>
+                                    <option value="12" data-i18n="settings_chunk_12">12 minutes (fewest joins)</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;" data-i18n="settings_chunk_description">
+                                Files over 12 minutes are separated in blocks that overlap by 2
+                                seconds and are joined with a linear crossfade; shorter files are
+                                untouched. On a 90 minute file, 3 minute blocks peak at about 6 GB
+                                of RAM and 12 minute blocks at about 8.5 GB, for the same
+                                processing time. The join is sample-accurate at every setting.
+                            </p>
+                        </div>
+
+                        <!-- Channels Card -->
+                        <div class="settings-card">
+                            <div class="settings-card__title">
+                                <i class="fas fa-wave-square"></i> <span data-i18n="settings_channels_title">Channels</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" data-i18n="settings_mono_label">Mono Sources</label>
+                                <select id="settings-mono" class="form-select">
+                                    <option value="false" selected data-i18n="settings_mono_dual">Deliver dual-mono stereo</option>
+                                    <option value="true" data-i18n="settings_mono_mono">Deliver mono</option>
+                                </select>
+                            </div>
+                            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 8px;" data-i18n="settings_channels_description">
+                                Sources with more than 2 channels (5.1) are always downmixed to
+                                stereo. For dialogue, extract the centre channel first.
+                            </p>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -230,6 +296,7 @@
     <script src="js/translations.js"></script>
     <script src="js/bridge.js"></script>
     <script src="js/ui.js"></script>
+    <script src="js/settings.js"></script>
     <script src="js/queue.js"></script>
     <script src="js/app.js"></script>
 </body>

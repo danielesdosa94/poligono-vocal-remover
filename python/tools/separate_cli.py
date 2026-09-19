@@ -28,6 +28,8 @@ if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
 
 from engine import (  # noqa: E402
+    CHUNK_OVERLAP_SECONDS,
+    CHUNK_THRESHOLD_MINUTES,
     FORMATS,
     MODES,
     PRESETS,
@@ -35,6 +37,7 @@ from engine import (  # noqa: E402
     SeparationCancelled,
     SeparationEngine,
     load_audio,
+    plan_chunks,
 )
 from utils.protocol import ProcessingStep, Protocol  # noqa: E402
 
@@ -57,6 +60,14 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--ffmpeg", default=None, help="Path to ffmpeg binary")
     parser.add_argument("--shifts", type=int, default=None, help="Override preset shifts")
     parser.add_argument("--overlap", type=float, default=None, help="Override preset overlap")
+    parser.add_argument("--chunk-minutes", type=float, default=None,
+                        help="Block length for long files (0 disables chunking)")
+    parser.add_argument("--chunk-overlap", type=float, default=CHUNK_OVERLAP_SECONDS,
+                        help="Crossfade width between blocks, in seconds")
+    parser.add_argument("--chunk-threshold", type=float, default=CHUNK_THRESHOLD_MINUTES,
+                        help="Minutes below which a file is never split (0 = always split)")
+    parser.add_argument("--mono-output", action="store_true",
+                        help="Deliver mono stems when the source is mono")
     parser.add_argument("--keep-alive-demo", action="store_true", help="Run the file twice on one engine")
     parser.add_argument("--no-null-test", action="store_true", help="Skip the null test")
     return parser.parse_args(argv)
@@ -66,9 +77,9 @@ def db(value: float) -> float:
     return 20.0 * math.log10(value) if value > 0 else -math.inf
 
 
-def null_test(input_path: str, result: JobResult, ffmpeg_path) -> dict:
+def null_test(input_path: str, result: JobResult, ffmpeg_path, args) -> dict:
     """Compare sum(written stems) against the source, both at the source rate."""
-    source = load_audio(input_path, ffmpeg_path).data
+    source = load_audio(input_path, ffmpeg_path, mono_output=args.mono_output).data
     total = None
     frames = source.shape[0]
     for name, res in result.outputs.items():
@@ -79,7 +90,7 @@ def null_test(input_path: str, result: JobResult, ffmpeg_path) -> dict:
     peak = float(np.max(np.abs(residual)))
     rms = float(np.sqrt(np.mean(np.square(residual, dtype=np.float64))))
     source_peak = float(np.max(np.abs(source[:frames])))
-    return {
+    report = {
         "frames_compared": int(frames),
         "residual_peak_dbfs": db(peak),
         "residual_rms_dbfs": db(rms),
@@ -89,6 +100,28 @@ def null_test(input_path: str, result: JobResult, ffmpeg_path) -> dict:
         # can reach, since fl(v + fl(s - v)) cannot always return s.
         "float32_floor_dbfs": db(source_peak * 2 ** -24),
     }
+
+    # The seams are what chunking has to prove. Measure the residual inside
+    # the crossfade windows on their own: if the assembly were misaligned or
+    # the weights did not sum to 1, this is where it would show up.
+    if result.stats.chunks > 1:
+        plan = plan_chunks(
+            result.source_frames,
+            result.source_samplerate,
+            chunk_minutes=args.chunk_minutes,
+            overlap_seconds=args.chunk_overlap,
+            threshold_minutes=args.chunk_threshold,
+        )
+        peaks = []
+        for start, end in plan.overlap_ranges():
+            end = min(end, frames)
+            if end > start:
+                peaks.append(float(np.max(np.abs(residual[start:end]))))
+        if peaks:
+            report["crossfade_zones"] = len(peaks)
+            report["crossfade_peak_dbfs"] = db(max(peaks))
+            report["crossfade_worst_zone"] = int(np.argmax(peaks)) + 1
+    return report
 
 
 def run_job(engine: SeparationEngine, protocol: Protocol, args, run_index: int) -> JobResult:
@@ -117,6 +150,11 @@ def run_job(engine: SeparationEngine, protocol: Protocol, args, run_index: int) 
             job_id=f"cli-{os.getpid()}-{run_index}",
             shifts=args.shifts,
             overlap=args.overlap,
+            mono_output=args.mono_output,
+            chunk_minutes=args.chunk_minutes,
+            chunk_overlap_seconds=args.chunk_overlap,
+            chunk_threshold_minutes=args.chunk_threshold,
+            on_download=lambda info: protocol.emit_download_progress(info),
         )
     except SeparationCancelled:
         protocol.emit_cancelled()
@@ -148,7 +186,16 @@ def print_summary(args, result: JobResult, null: dict, run_index: int) -> None:
     print(f"  device                 : {result.stats.device}")
     print(f"  model loaded this run  : {'yes' if result.stats.model_loaded_now else 'no (cached)'}")
     print(f"  source                 : {result.source_samplerate} Hz, {result.source_channels} ch, {result.source_frames} frames")
+    print(f"  output channels        : {result.channels_out}")
     print(f"  model rate             : {result.stats.model_samplerate} Hz")
+    if result.stats.chunks > 1:
+        print(
+            f"  chunking               : {result.stats.chunks} blocks of "
+            f"{result.stats.chunk_seconds / 60:.1f} min, "
+            f"{result.stats.crossfade_seconds:.1f}s linear crossfade"
+        )
+    else:
+        print("  chunking               : off (one pass)")
     print(f"  separation time        : {result.stats.separate_seconds:.1f} s")
     print(f"  total job time         : {result.elapsed_seconds:.1f} s")
     print("  outputs:")
@@ -167,6 +214,12 @@ def print_summary(args, result: JobResult, null: dict, run_index: int) -> None:
         print(f"    residual peak        : {null['residual_peak_dbfs']:.1f} dBFS")
         print(f"    residual RMS         : {null['residual_rms_dbfs']:.1f} dBFS")
         print(f"    float32 floor (ref)  : {null['float32_floor_dbfs']:.1f} dBFS (half ULP at source peak)")
+        if "crossfade_peak_dbfs" in null:
+            print(
+                f"    crossfade zones      : {null['crossfade_zones']} "
+                f"(worst is #{null['crossfade_worst_zone']})"
+            )
+            print(f"    crossfade peak       : {null['crossfade_peak_dbfs']:.1f} dBFS")
     for message in result.warnings:
         print(f"  warning: {message}")
     print(line)
@@ -195,7 +248,7 @@ def main(argv=None) -> int:
             null = None
             if not args.no_null_test:
                 if FORMATS[args.format].sample_accurate:
-                    null = null_test(args.input, result, args.ffmpeg)
+                    null = null_test(args.input, result, args.ffmpeg, args)
                 else:
                     protocol.emit_log("Null test skipped: lossy format is not sample-accurate", "info")
             print_summary(args, result, null, run_index)

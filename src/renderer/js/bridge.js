@@ -32,9 +32,23 @@ function escapeHtml(value) {
     })[ch]);
 }
 
+/**
+ * Human-readable byte count, for the model download progress line.
+ */
+function formatBytes(bytes) {
+    const value = Number(bytes) || 0;
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(0)} KB`;
+    if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 const bridge = {
     openFiles: () => preloadApi.openFiles(),
     getFileInfo: (filePath) => preloadApi.getFileInfo(filePath),
+    getSettings: () => preloadApi.getSettings(),
+    saveSettings: (patch) => preloadApi.saveSettings(patch),
+    chooseOutputDir: () => preloadApi.chooseOutputDir(),
     runJob: (payload) => preloadApi.runJob(payload),
     cancelJob: () => preloadApi.cancelJob(),
     openPath: (targetPath) => preloadApi.openPath(targetPath),

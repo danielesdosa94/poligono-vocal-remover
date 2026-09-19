@@ -17,7 +17,8 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 # Bump when the command/event contract changes in a way Electron must know about.
-PROTOCOL_VERSION = 2
+# 3: added download_progress; separate accepts bitDepth / monoOutput / chunkMinutes.
+PROTOCOL_VERSION = 3
 
 _WRITE_LOCK = threading.Lock()
 
@@ -27,6 +28,7 @@ class EventType(Enum):
     READY = "ready"
     PONG = "pong"
     START = "start"
+    DOWNLOAD_PROGRESS = "download_progress"
     PROGRESS = "progress"
     STEP_CHANGE = "step_change"
     LOG = "log"
@@ -159,6 +161,17 @@ class Protocol:
         if detail:
             data["detail"] = detail
         self._emit(EventType.PROGRESS, data)
+
+    def emit_download_progress(self, info: Dict[str, Any]) -> None:
+        """
+        Report model weights being fetched.
+
+        Sent while the job sits in LOADING_MODEL, so the UI can show a real
+        download instead of a bar frozen at "Loading model". `info` carries
+        name, signature, fileIndex, fileCount, bytesDone, bytesTotal and
+        percent (across the whole set of files, not just the current one).
+        """
+        self._emit(EventType.DOWNLOAD_PROGRESS, dict(info))
 
     def emit_log(self, message: str, level: str = "info") -> None:
         """Emit a log message (shown in the app's debug console)."""

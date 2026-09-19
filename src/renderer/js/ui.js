@@ -22,6 +22,11 @@ const elements = {
     optFormat: document.getElementById('opt-format'),
     optModel: document.getElementById('opt-model'),
     optQuality: document.getElementById('opt-quality'),
+    optBitDepth: document.getElementById('opt-bit-depth'),
+    optOutputMode: document.getElementById('opt-output-mode'),
+    groupBitDepth: document.getElementById('group-bit-depth'),
+    outputDirPath: document.getElementById('output-dir-path'),
+    btnChooseOutput: document.getElementById('btn-choose-output'),
     consoleLog: document.getElementById('console-log'),
     navTabs: document.querySelectorAll('.nav-tab'),
     // Views
@@ -32,6 +37,8 @@ const elements = {
     settingsQuality: document.getElementById('settings-quality'),
     settingsDevice: document.getElementById('settings-device'),
     settingsLanguage: document.getElementById('settings-language'),
+    settingsMono: document.getElementById('settings-mono'),
+    settingsChunk: document.getElementById('settings-chunk'),
     // Brand
     brandLogo: document.querySelector('.brand__logo'),
     brandLogoFallback: document.querySelector('.brand__logo-fallback'),
@@ -41,8 +48,9 @@ const elements = {
 // Current mode state
 let currentMode = 'vocal_remover';
 
-// Current language state
-let currentLanguage = localStorage.getItem('language') || 'en';
+// Current language state. The persisted value arrives from settings.js at
+// boot; this is only the value used until then.
+let currentLanguage = 'en';
 
 function getDict() {
     return translations[currentLanguage] || translations['en'];
@@ -101,6 +109,20 @@ function logConsole(message, level = 'info') {
 // Job Rendering
 // =====================================================================
 
+/**
+ * Warnings that belong to this job, on the job row itself.
+ *
+ * A 5.1 downmix or a mono source changes what the client gets, so it cannot
+ * be left buried in the debug log where nobody reads it.
+ */
+function renderJobWarnings(job) {
+    if (!job.warnings || job.warnings.length === 0) return '';
+    const lines = job.warnings
+        .map(message => `<div class="job-warning">⚠️ ${escapeHtml(message)}</div>`)
+        .join('');
+    return `<div class="job-warnings">${lines}</div>`;
+}
+
 function renderJob(job) {
     const existingItem = document.getElementById(`job-${job.id}`);
 
@@ -117,6 +139,7 @@ function renderJob(job) {
                 <div class="job-progress-bar" style="width: ${job.progress}%"></div>
             </div>
             <div class="job-detail">${escapeHtml(job.detail)}</div>
+            ${renderJobWarnings(job)}
         </div>
         <div class="job-actions">
             ${job.status === 'completed' ?
@@ -167,7 +190,10 @@ function showView(viewName) {
 // Internationalization (i18n)
 // =====================================================================
 
-// Update all UI text based on selected language
+/**
+ * Retranslate the whole UI. Purely visual: persisting the choice is
+ * settings.js's job, so that calling this from the boot path cannot loop.
+ */
 function updateLanguage(lang) {
     if (!translations[lang]) {
         console.error(`Language '${lang}' not found in translations`);
@@ -207,10 +233,11 @@ function updateLanguage(lang) {
         }
     });
 
-    // Save preference to localStorage
-    localStorage.setItem('language', lang);
+    // Options built at runtime carry translated text too.
+    renderPresetLabels();
+    renderBitDepthOptions();
+    renderOutputDir();
 
-    // Log language change
     logConsole(interpolate(dict.console_language_changed, { value: lang }));
 }
 

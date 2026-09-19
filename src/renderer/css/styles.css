@@ -898,6 +898,69 @@ body {
 }
 
 /* ============================================================================
+   Output Settings - bit depth hint and output folder
+   ========================================================================= */
+
+.form-hint {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+.output-dir-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.output-dir-path {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    /* Long Windows paths: keep the end visible, it is the telling part. */
+    direction: rtl;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.output-dir-path--missing {
+    color: var(--color-error);
+    text-decoration: line-through;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 11px;
+    flex: 0 0 auto;
+}
+
+/* ============================================================================
+   Job warnings (channel downmix, mono sources)
+   ========================================================================= */
+
+.job-warnings {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.job-warning {
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--color-warning);
+    background: rgba(255, 167, 38, 0.08);
+    border-left: 2px solid var(--color-warning);
+    padding: 3px 8px;
+    border-radius: 2px;
+}
+
+/* ============================================================================
    Utility Classes
    ========================================================================= */
 

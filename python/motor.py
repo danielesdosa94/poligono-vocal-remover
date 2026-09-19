@@ -13,13 +13,18 @@ noise and crash traces.
 Commands (stdin -> motor):
     {"type": "separate", "jobId": "...", "input": "...", "outputDir": "...",
      "mode": "vocal_remover", "preset": "hq", "format": "wav", "device": "auto",
-     "model": "htdemucs_ft"}            # "model" is an optional override
+     "model": "htdemucs_ft",            # optional override
+     "bitDepth": 32,                    # 16/24/32 (wav), 16/24 (flac)
+     "monoOutput": false,               # mono stems for a mono source
+     "chunkMinutes": 3,                 # block length for long files, 0 = off
+     "chunkThresholdMinutes": 12}       # never split a file shorter than this
     {"type": "cancel", "jobId": "..."}
     {"type": "ping"}
     {"type": "shutdown"}
 
-Events (motor -> stdout): ready, pong, start, step_change, progress, log,
-warning, error, success, cancelled. Every event carries "jobId".
+Events (motor -> stdout): ready, pong, start, step_change, progress,
+download_progress, log, warning, error, success, cancelled. Every event
+carries "jobId".
 
 Threads:
     main      reads stdin and dispatches commands
@@ -200,7 +205,15 @@ class MotorDaemon:
             cuda["name"] = props.name
             cuda["vramGb"] = round(props.total_memory / 1024**3, 1)
 
-        from engine import MODEL_CONFIGS, PRESETS
+        from engine import (
+            CHUNK_MINUTES,
+            CHUNK_OVERLAP_SECONDS,
+            CHUNK_THRESHOLD_MINUTES,
+            FORMATS,
+            MODEL_CONFIGS,
+            MODES,
+            PRESETS,
+        )
 
         self.session.emit_ready({
             "pid": os.getpid(),
@@ -208,8 +221,41 @@ class MotorDaemon:
             "torch": torch.__version__,
             "cuda": cuda,
             "ffmpeg": self.ffmpeg_path,
-            "presets": list(PRESETS),
-            "models": list(MODEL_CONFIGS),
+            # Full tables, not just names: the UI labels presets with their
+            # relative cost and builds the bit depth choices from the formats.
+            "presets": {
+                name: {
+                    "model": preset.model,
+                    "shifts": preset.shifts,
+                    "overlap": preset.overlap,
+                    "relativeCost": preset.relative_cost,
+                    "description": preset.description,
+                }
+                for name, preset in PRESETS.items()
+            },
+            "formats": {
+                name: {
+                    "extension": spec.extension,
+                    "bitDepths": list(spec.bit_depths),
+                    "defaultBitDepth": spec.default_bit_depth,
+                    "sampleAccurate": spec.sample_accurate,
+                }
+                for name, spec in FORMATS.items()
+            },
+            "modes": {name: spec.description for name, spec in MODES.items()},
+            "models": {
+                name: {
+                    "description": config["description"],
+                    "stems": list(config["stems"]),
+                    "bagSize": config["bag_size"],
+                }
+                for name, config in MODEL_CONFIGS.items()
+            },
+            "chunking": {
+                "thresholdMinutes": CHUNK_THRESHOLD_MINUTES,
+                "chunkMinutes": CHUNK_MINUTES,
+                "crossfadeSeconds": CHUNK_OVERLAP_SECONDS,
+            },
             "frozen": bool(getattr(sys, "frozen", False)),
         })
         if removed:
@@ -331,6 +377,10 @@ class MotorDaemon:
                 "format": command.get("format") or "wav",
                 "device": command.get("device") or "auto",
                 "model": command.get("model") or None,
+                "bitDepth": command.get("bitDepth"),
+                "monoOutput": bool(command.get("monoOutput")),
+                "chunkMinutes": command.get("chunkMinutes"),
+                "chunkThresholdMinutes": command.get("chunkThresholdMinutes"),
                 "cancelled": False,
             }
             self._pending[job_id] = job
@@ -399,12 +449,14 @@ class MotorDaemon:
 
     def _run_job(self, job: dict, proto: Protocol) -> None:
         from engine import (
+            CHUNK_THRESHOLD_MINUTES,
             FORMATS,
             MODEL_CONFIGS,
             MODES,
             PRESETS,
             AudioIOError,
             SeparationCancelled,
+            resolve_bit_depth,
             resolve_device,
         )
 
@@ -417,6 +469,16 @@ class MotorDaemon:
                 raise ValueError(f"Unsupported format: {job['format']}")
             if job["model"] is not None and job["model"] not in MODEL_CONFIGS:
                 raise ValueError(f"Unknown model: {job['model']}")
+            # Raises for a depth the format cannot carry (e.g. 32 bit FLAC).
+            bit_depth = resolve_bit_depth(job["format"], job["bitDepth"])
+            chunk_minutes = (
+                None if job["chunkMinutes"] is None else float(job["chunkMinutes"])
+            )
+            chunk_threshold = (
+                CHUNK_THRESHOLD_MINUTES
+                if job["chunkThresholdMinutes"] is None
+                else float(job["chunkThresholdMinutes"])
+            )
 
             preset = PRESETS[job["preset"]]
             model = job["model"] or preset.model
@@ -457,16 +519,24 @@ class MotorDaemon:
                 percent = fraction * 100.0
                 proto.emit_progress(percent, percent, detail=stage)
 
+            def on_download(info: dict) -> None:
+                proto.emit_download_progress(info)
+
             result = engine.separate_file(
                 job["input"],
                 job["outputDir"],
                 mode=job["mode"],
                 preset=job["preset"],
                 fmt=job["format"],
+                bit_depth=bit_depth,
                 ffmpeg_path=self.ffmpeg_path,
                 on_progress=on_progress,
                 job_id=temp_job_id(job["jobId"]),
                 model=job["model"],
+                mono_output=job["monoOutput"],
+                chunk_minutes=chunk_minutes,
+                chunk_threshold_minutes=chunk_threshold,
+                on_download=on_download,
             )
 
             proto.emit_step_change(ProcessingStep.CLEANUP, 6)
@@ -481,12 +551,17 @@ class MotorDaemon:
                     "preset": job["preset"],
                     "mode": job["mode"],
                     "format": job["format"],
+                    "bitDepth": bit_depth,
                     "sampleRate": result.source_samplerate,
                     "sourceFrames": result.source_frames,
                     "sourceChannels": result.source_channels,
+                    "channelsOut": result.channels_out,
                     "stemsGenerated": len(result.outputs),
                     "modelLoadedNow": result.stats.model_loaded_now,
                     "separateSeconds": round(result.stats.separate_seconds, 2),
+                    "chunks": result.stats.chunks,
+                    "crossfadeSeconds": result.stats.crossfade_seconds,
+                    "warnings": result.warnings,
                     "frameDeltas": {name: res.frame_delta for name, res in result.outputs.items()},
                 },
                 output_dir=result.output_dir,

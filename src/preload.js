@@ -20,6 +20,7 @@ const MOTOR_EVENT_CHANNELS = {
     start: 'motor:start',
     progress: 'motor:progress',
     step: 'motor:step',
+    download: 'motor:download',
     log: 'motor:log',
     warning: 'motor:warning',
     error: 'motor:error',
@@ -35,6 +36,21 @@ contextBridge.exposeInMainWorld('api', {
      * Validate a path and read its metadata (name, size, type, extension).
      */
     getFileInfo: (filePath) => ipcRenderer.invoke('file:getInfo', filePath),
+
+    /**
+     * Persisted settings. getSettings resolves with
+     * { settings, defaults, outputDirUsable }; saveSettings takes a partial
+     * patch and resolves with { settings, outputDirUsable }.
+     */
+    getSettings: () => ipcRenderer.invoke('settings:get'),
+
+    saveSettings: (patch) => ipcRenderer.invoke('settings:set', patch),
+
+    /**
+     * Folder picker for the output directory. Resolves with
+     * { canceled, settings }; on success the choice is already persisted.
+     */
+    chooseOutputDir: () => ipcRenderer.invoke('dialog:chooseOutputDir'),
 
     /**
      * Run one separation job to completion. Resolves with the motor's

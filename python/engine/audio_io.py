@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import soundfile as sf
 
-from .presets import FORMATS, MP3_BITRATE, resolve_bit_depth
+from .presets import FORMATS, MP3_BITRATE, STREAM_BLOCK_FRAMES, resolve_bit_depth
 
 CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 TEMP_ROOT_NAME = "poligono-ai-hub"
@@ -208,6 +208,116 @@ def fit_frames(data: np.ndarray, expected_frames: Optional[int]) -> Tuple[np.nda
     return data, delta
 
 
+def fold_to_channels(data: np.ndarray, channels: int) -> np.ndarray:
+    """
+    Reduce a stem to `channels` by averaging, or pass it through unchanged.
+
+    Only used for mono delivery of a mono source: Demucs always works in
+    stereo, so a mono file is expanded on the way in and its stems come back
+    as two nearly identical channels. The MEAN is the correct fold here (a
+    sum would be +6 dB); this is a channel downmix, not a stem combination,
+    where the rule is always summation.
+    """
+    data = _as_float32_2d(data)
+    if channels <= 0 or data.shape[1] == channels:
+        return data
+    if channels == 1:
+        return np.ascontiguousarray(data.mean(axis=1, keepdims=True, dtype=np.float32))
+    raise ValueError(f"Cannot fold {data.shape[1]} channels to {channels}")
+
+
+class StemStreamWriter:
+    """
+    Append-only float32 WAV writer, for assembling a stem block by block.
+
+    A 90 minute stem is 1.9 GB at the model rate; the chunked path writes it
+    out as it goes instead of holding it. The file it produces is a plain
+    float32 WAV that write_stem() can take as `source_path`.
+    """
+
+    def __init__(self, path: Path, samplerate: int, channels: int):
+        self.path = Path(path)
+        self.samplerate = int(samplerate)
+        self.channels = int(channels)
+        self.frames = 0
+        self._file = sf.SoundFile(
+            str(self.path),
+            mode="w",
+            samplerate=self.samplerate,
+            channels=self.channels,
+            subtype="FLOAT",
+            format="WAV",
+        )
+
+    def append(self, block: np.ndarray) -> None:
+        block = _as_float32_2d(block)
+        if block.shape[1] != self.channels:
+            raise ValueError(
+                f"{self.path.name}: expected {self.channels} channels, got {block.shape[1]}"
+            )
+        if block.shape[0] == 0:
+            return
+        self._file.write(block)
+        self.frames += block.shape[0]
+
+    def close(self) -> None:
+        if self._file is not None and not self._file.closed:
+            self._file.flush()
+            self._file.close()
+
+    def __enter__(self) -> "StemStreamWriter":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
+
+
+def subtract_to_file(
+    source: np.ndarray,
+    stem_paths: List[str],
+    out_path: Path,
+    samplerate: int,
+    expected_frames: int,
+    block_frames: int = STREAM_BLOCK_FRAMES,
+) -> Path:
+    """
+    Stream `source` minus the named stem files into a float32 WAV.
+
+    The in-memory twin of this is subtract_from_source(); this version never
+    holds a whole stem, which is what keeps a 90 minute job inside its RAM
+    budget. Stems are read from disk (not from the arrays that produced them)
+    so the residual nulls against the files actually delivered.
+
+    Frames beyond the end of a stem file count as silence, and frames past
+    `expected_frames` are ignored, matching read_stem(path, expected_frames).
+    """
+    source = _as_float32_2d(source)
+    channels = source.shape[1]
+    handles = [sf.SoundFile(path, mode="r") for path in stem_paths]
+    try:
+        with StemStreamWriter(out_path, samplerate, channels) as writer:
+            offset = 0
+            while offset < expected_frames:
+                count = min(block_frames, expected_frames - offset)
+                residual = np.array(source[offset:offset + count], dtype=np.float32, copy=True)
+                if residual.shape[0] < count:
+                    pad = np.zeros((count - residual.shape[0], channels), dtype=np.float32)
+                    residual = np.concatenate([residual, pad], axis=0)
+                for handle in handles:
+                    block = handle.read(count, dtype="float32", always_2d=True)
+                    if block.shape[0]:
+                        residual[:block.shape[0]] -= block
+                writer.append(residual)
+                offset += count
+    finally:
+        for handle in handles:
+            try:
+                handle.close()
+            except Exception:  # noqa: BLE001 - closing must never mask the real error
+                pass
+    return Path(out_path)
+
+
 def read_stem(path: str, expected_frames: Optional[int] = None) -> np.ndarray:
     """
     Read a written stem back as float32 (frames, channels).
@@ -332,11 +442,14 @@ def load_audio(
     path: str,
     ffmpeg_path: Optional[str] = None,
     temp_dir: Optional[Path] = None,
+    mono_output: bool = False,
 ) -> LoadedAudio:
     """
     Load a media file as float32 stereo (frames, 2) at its native sample rate.
 
-    - Mono is duplicated to both channels (with a warning).
+    - Mono is duplicated to both channels (with a warning), unless
+      `mono_output` is set, in which case it stays single-channel and the
+      stems are folded back to mono on the way out.
     - More than 2 channels is downmixed to stereo by ffmpeg (with a warning).
     """
     if not os.path.isfile(path):
@@ -350,7 +463,11 @@ def load_audio(
         data, samplerate = _decode_with_ffmpeg(path, ffmpeg_path, temp_dir)
 
     channels_in = int(data.shape[1])
-    if channels_in == 1:
+    if channels_in == 1 and mono_output:
+        # Kept at one channel: Demucs expands it internally and the stems are
+        # folded back with fold_to_channels() before they are written.
+        warnings.append("Mono source: stems will be delivered as mono")
+    elif channels_in == 1:
         data = np.repeat(data, 2, axis=1)
         warnings.append("Mono source: duplicated to both channels, output stems will be dual-mono")
     elif channels_in > 2:
@@ -379,6 +496,7 @@ def _build_filter(
     fmt: str,
     bit_depth: Optional[int],
     expected_frames: Optional[int],
+    sr_in: Optional[int] = None,
 ) -> str:
     """
     Compose the ffmpeg -af chain: resample [+ dither] -> pad -> trim.
@@ -386,19 +504,27 @@ def _build_filter(
     Dither is only added for integer PCM targets, and the output sample
     format is pinned (osf) so the dither is applied inside aresample at the
     final word length rather than by an implicit conversion later on.
-    """
-    resample = f"aresample={target_sr}:{RESAMPLE_OPTS}"
-    if fmt in ("wav", "flac") and bit_depth == 16:
-        method = DITHER_16_BIT_SHAPED if target_sr in SHAPED_DITHER_RATES else DITHER_16_BIT_PLAIN
-        resample += f":dither_method={method}:osf=s16"
-    elif fmt in ("wav", "flac") and bit_depth == 24:
-        resample += f":dither_method={DITHER_24_BIT}:osf=s32"
 
-    parts = [resample]
+    When the rate does not change and the target is float32 there is nothing
+    for the resampler to do, so it is left out and the samples pass through
+    bit for bit. That is the path a chunk-assembled stem takes when the
+    source already runs at the model rate.
+    """
+    parts: List[str] = []
+    passthrough = fmt == "wav" and bit_depth == 32 and sr_in is not None and sr_in == target_sr
+    if not passthrough:
+        resample = f"aresample={target_sr}:{RESAMPLE_OPTS}"
+        if fmt in ("wav", "flac") and bit_depth == 16:
+            method = DITHER_16_BIT_SHAPED if target_sr in SHAPED_DITHER_RATES else DITHER_16_BIT_PLAIN
+            resample += f":dither_method={method}:osf=s16"
+        elif fmt in ("wav", "flac") and bit_depth == 24:
+            resample += f":dither_method={DITHER_24_BIT}:osf=s32"
+        parts.append(resample)
+
     if expected_frames is not None:
         parts.append(f"apad=whole_len={expected_frames}")
         parts.append(f"atrim=end_sample={expected_frames}")
-    return ",".join(parts)
+    return ",".join(parts) if parts else "anull"
 
 
 def _codec_args(fmt: str, bit_depth: Optional[int]) -> List[str]:
@@ -412,7 +538,7 @@ def _codec_args(fmt: str, bit_depth: Optional[int]) -> List[str]:
 
 
 def write_stem(
-    data: np.ndarray,
+    data: Optional[np.ndarray],
     sr_in: int,
     path: str,
     target_sr: Optional[int] = None,
@@ -421,13 +547,15 @@ def write_stem(
     ffmpeg_path: Optional[str] = None,
     expected_frames: Optional[int] = None,
     temp_dir: Optional[Path] = None,
+    source_path: Optional[Path] = None,
 ) -> WriteResult:
     """
     Write one stem to disk, sample-accurate against the source.
 
     Args:
-        data: float32 (frames, channels) at sr_in.
-        sr_in: Sample rate of `data` (the model's rate, 44100 for Demucs v4).
+        data: float32 (frames, channels) at sr_in. None when `source_path`
+            is given instead.
+        sr_in: Sample rate of the input (the model's rate, 44100 for Demucs v4).
         path: Destination file (extension should match fmt).
         target_sr: Desired output rate; defaults to sr_in.
         fmt: "wav", "flac" or "mp3".
@@ -435,6 +563,9 @@ def write_stem(
         ffmpeg_path: Explicit ffmpeg binary (optional).
         expected_frames: Frame count the output must have at target_sr.
         temp_dir: Where to put the intermediate float32 WAV (optional).
+        source_path: A float32 WAV at sr_in to encode from, instead of `data`.
+            The chunked path assembles stems straight to such a file, so this
+            skips holding the whole stem in memory and skips a copy.
 
     Fast path: float32 WAV at the same rate is written directly by soundfile.
     Everything else goes through a single ffmpeg call.
@@ -442,38 +573,46 @@ def write_stem(
     fmt = fmt.lower()
     if fmt not in FORMATS:
         raise ValueError(f"Unsupported format: {fmt}")
+    if (data is None) == (source_path is None):
+        raise ValueError("write_stem needs exactly one of `data` or `source_path`")
     spec = FORMATS[fmt]
     bit_depth = resolve_bit_depth(fmt, bit_depth)
     target_sr = int(target_sr or sr_in)
-    data = _as_float32_2d(data)
     warnings: List[str] = []
 
     os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
 
-    if fmt == "wav" and bit_depth == 32 and target_sr == sr_in:
+    if data is not None and fmt == "wav" and bit_depth == 32 and target_sr == sr_in:
+        data = _as_float32_2d(data)
         data, _ = fit_frames(data, expected_frames)
         sf.write(path, data, sr_in, subtype="FLOAT")
     else:
         ffmpeg = _require_ffmpeg(ffmpeg_path)
         own_temp = temp_dir is None
         temp_dir = temp_dir or make_temp_dir()
-        temp_in = temp_dir / f"stem_{uuid.uuid4().hex}.f32.wav"
+        temp_in: Optional[Path] = None
         # Encode next to the destination, then atomically swap in, so a
         # failed encode never leaves a half-written stem behind.
         temp_out = f"{path}.part{spec.extension}"
         try:
-            sf.write(str(temp_in), data, sr_in, subtype="FLOAT")
+            if source_path is not None:
+                ffmpeg_input = str(source_path)
+            else:
+                temp_in = temp_dir / f"stem_{uuid.uuid4().hex}.f32.wav"
+                sf.write(str(temp_in), _as_float32_2d(data), sr_in, subtype="FLOAT")
+                ffmpeg_input = str(temp_in)
             cmd = [
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-                "-i", str(temp_in),
-                "-af", _build_filter(target_sr, fmt, bit_depth, expected_frames),
+                "-i", ffmpeg_input,
+                "-af", _build_filter(target_sr, fmt, bit_depth, expected_frames, sr_in),
                 *_codec_args(fmt, bit_depth),
                 "-y", temp_out,
             ]
             _run(cmd)
             os.replace(temp_out, path)
         finally:
-            for leftover in (str(temp_in), temp_out):
+            leftovers = [temp_out] + ([str(temp_in)] if temp_in else [])
+            for leftover in leftovers:
                 try:
                     os.remove(leftover)
                 except OSError:

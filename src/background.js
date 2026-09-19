@@ -19,6 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const readline = require('readline');
+const settings = require('./settings');
 
 // =============================================================================
 // CONFIGURATION
@@ -52,6 +53,7 @@ const EVENT_CHANNELS = {
     start: 'motor:start',
     progress: 'motor:progress',
     step_change: 'motor:step',
+    download_progress: 'motor:download',
     log: 'motor:log',
     warning: 'motor:warning',
     error: 'motor:error',
@@ -373,10 +375,17 @@ class ProcessManager {
     /**
      * Run one separation job. Resolves (never rejects) with the terminal
      * event: { status: 'success' | 'error' | 'cancelled', ...event }.
+     *
+     * The persisted settings are the source of truth for every option; the
+     * renderer may override individual fields (the mode comes from the active
+     * tab, for instance) but never has to know the defaults.
      */
     async runJob({ inputPath, outputDir, options = {} }) {
         if (this.currentJob) {
             return { status: 'error', message: 'A job is already running', code: 'BUSY', fatal: true };
+        }
+        if (!inputPath) {
+            return { status: 'error', message: 'No input file', code: 'INVALID_ARGS', fatal: true };
         }
 
         try {
@@ -390,6 +399,10 @@ class ProcessManager {
             };
         }
 
+        const current = settings.sanitize({
+            ...settings.load(),
+            ...settings.definedOnly(options),
+        });
         const jobId = `job-${++this.jobCounter}-${Date.now().toString(36)}`;
         return new Promise((resolve) => {
             this.currentJob = { jobId, resolve, cancelling: false, cancelTimer: null, onSettled: null };
@@ -398,13 +411,16 @@ class ProcessManager {
                 type: 'separate',
                 jobId,
                 input: inputPath,
-                outputDir: outputDir || null,
-                mode: options.mode || 'vocal_remover',
-                preset: options.preset || 'hq',
-                format: options.format || 'wav',
-                device: options.device || 'auto',
+                outputDir: outputDir || settings.resolveOutputDir(current, inputPath),
+                mode: current.mode,
+                preset: current.preset,
+                format: current.format,
+                device: current.device,
+                model: current.model,
+                bitDepth: settings.bitDepthFor(current, current.format),
+                monoOutput: current.monoOutput,
+                chunkMinutes: current.chunkMinutes,
             };
-            if (options.model) command.model = options.model;
 
             if (!this.send(command)) {
                 this.settleJob({
@@ -525,6 +541,44 @@ ipcMain.handle('dialog:openFile', async () => {
         return null;
     }
     return result.filePaths;
+});
+
+/**
+ * Persisted settings. `settings:get` also reports whether the configured
+ * output folder is still reachable, so the UI can say so instead of silently
+ * writing somewhere else.
+ */
+ipcMain.handle('settings:get', () => ({
+    settings: settings.load(),
+    defaults: settings.defaults(),
+    outputDirUsable: settings.isUsableDirectory(settings.load().outputDir),
+}));
+
+ipcMain.handle('settings:set', (event, patch) => {
+    const saved = settings.save(patch || {});
+    return {
+        settings: saved,
+        outputDirUsable: settings.isUsableDirectory(saved.outputDir),
+    };
+});
+
+/**
+ * Pick the output folder. Returns the saved settings so the renderer never
+ * has to guess what was accepted.
+ */
+ipcMain.handle('dialog:chooseOutputDir', async () => {
+    const current = settings.load();
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Choose Output Folder',
+        properties: ['openDirectory', 'createDirectory'],
+        defaultPath: settings.isUsableDirectory(current.outputDir) ? current.outputDir : undefined,
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+        return { canceled: true, settings: current };
+    }
+    const saved = settings.save({ outputDir: result.filePaths[0], outputMode: 'folder' });
+    return { canceled: false, settings: saved };
 });
 
 /**

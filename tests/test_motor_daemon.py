@@ -18,6 +18,8 @@ from pathlib import Path
 import pytest
 import soundfile as sf
 
+from utils.protocol import PROTOCOL_VERSION
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MOTOR = REPO_ROOT / "python" / "motor.py"
 TEMP_ROOT = Path(tempfile.gettempdir()) / "poligono-ai-hub"
@@ -104,8 +106,13 @@ def motor():
     """One daemon for the whole module so the model loads once (like the app)."""
     client = MotorClient(parent_pid=os.getpid())
     ready = client.wait_for("ready", READY_TIMEOUT)
-    assert ready["protocolVersion"] == 2
+    assert ready["protocolVersion"] == PROTOCOL_VERSION
     assert ready["jobId"] is None
+    # The ready event carries the full tables, not just names: the UI labels
+    # presets with their relative cost and builds bit depth choices from them.
+    assert ready["presets"]["hq"]["relativeCost"] == 4
+    assert 32 in ready["formats"]["wav"]["bitDepths"]
+    assert ready["chunking"]["chunkMinutes"] > 0
     yield client
     code = client.close()
     assert code == 0, client.stderr_tail()
@@ -186,6 +193,7 @@ def test_separate_job_reports_success_and_reuses_model(motor, make_fixture, tmp_
     motor.send(_separate("job-b", path, str(tmp_path / "out2")))
     done_b = motor.wait_for(("success", "error", "cancelled"), JOB_TIMEOUT, job_id="job-b")
     assert done_b["event"] == "success", done_b
+
     assert done["stats"]["modelLoadedNow"] is True
     assert done_b["stats"]["modelLoadedNow"] is False
     loaded_logs = [
@@ -196,6 +204,42 @@ def test_separate_job_reports_success_and_reuses_model(motor, make_fixture, tmp_
 
     assert not (TEMP_ROOT / f"motor-{motor.proc.pid}-job-a").exists()
     assert not (TEMP_ROOT / f"motor-{motor.proc.pid}-job-b").exists()
+
+
+def test_bit_depth_and_chunking_reach_the_engine(motor, make_fixture, tmp_path):
+    """The settings added in phase 4 have to survive the trip over stdin."""
+    path, data, sr = make_fixture(48000, seconds=6.0)
+    outdir = tmp_path / "depth"
+
+    motor.send(_separate(
+        "job-depth", path, str(outdir),
+        bitDepth=24,
+        # 5 s blocks over a 6 s clip: two blocks and one seam. A block has to
+        # clear the 2 s crossfade twice over or the layout refuses to split,
+        # and the threshold has to come down or a 6 s clip is never a
+        # "long file" in the first place.
+        chunkMinutes=5.0 / 60.0,
+        chunkThresholdMinutes=0,
+    ))
+    done = motor.wait_for(("success", "error", "cancelled"), JOB_TIMEOUT, job_id="job-depth")
+
+    assert done["event"] == "success", done
+    assert done["stats"]["bitDepth"] == 24
+    assert done["stats"]["chunks"] > 1
+    for stem_path in done["outputs"].values():
+        info = sf.info(stem_path)
+        assert info.subtype == "PCM_24"
+        assert info.samplerate == sr and info.frames == data.shape[0]
+
+    assert not (TEMP_ROOT / f"motor-{motor.proc.pid}-job-depth").exists()
+
+
+def test_an_impossible_bit_depth_is_rejected_not_silently_changed(motor, make_fixture, tmp_path):
+    path, _, _ = make_fixture(44100, seconds=1.0)
+    motor.send(_separate("job-bad-depth", path, str(tmp_path / "bad"), format="flac", bitDepth=32))
+    err = motor.wait_for("error", 30, job_id="job-bad-depth")
+    assert err["code"] == "INVALID_ARGS"
+    assert "32" in err["message"]
 
 
 def test_cancel_running_job_is_cooperative_and_leaves_nothing(motor, make_fixture, tmp_path):

@@ -54,6 +54,45 @@ PRESETS: Dict[str, Preset] = {
 
 DEFAULT_PRESET = "hq"
 
+# Demucs v4 runs at 44.1 kHz. Anything at another rate is resampled on the way
+# in by julius and on the way out by us, so this is the rate every internal
+# buffer and every chunk boundary is expressed in.
+MODEL_SAMPLERATE = 44100
+
+# Long-file chunking (see engine/chunking.py). A 90 min 48 kHz file is 2 GB as
+# a float32 array and its four stems another 7.6 GB, so past the threshold the
+# audio is separated in blocks that overlap by CHUNK_OVERLAP_SECONDS and are
+# streamed to disk instead of being accumulated in RAM.
+#
+# The two numbers answer different questions. The threshold is "is this file
+# long enough to bother?": below it nothing changes, so a song or a scene is
+# still separated in one pass exactly as before. The block length is "how big
+# a bite once we do", and it is what sets the memory ceiling.
+#
+# Measured on a 90 min 48 kHz stereo file, peak working set of the whole
+# process (source array included):
+#
+#     block   blocks   fast (htdemucs)   hq (htdemucs_ft, bag of 4)
+#     12 min      8         8.7 GB                  -
+#      6 min     16         6.2 GB         8.4 GB   (5.6 min)
+#      3 min     31         5.0 GB         6.1 GB   (5.4 min)
+#      2 min     46            -           5.7 GB   (6.0 min)
+#
+# Block length costs almost nothing in time: the model already works in ~7.8 s
+# segments internally, so the only overhead is the 2 s of overlap recomputed
+# per seam. That stays in the noise down to 3 minute blocks and only starts to
+# show at 2 (46 seams, +11% wall clock). The null test was -156 dBFS at every
+# setting. So 3 minutes is the default: the largest block that keeps the
+# heaviest preset inside the 6 GB budget of a 16 GB machine, for free.
+CHUNK_THRESHOLD_MINUTES = 12.0
+CHUNK_MINUTES = 3.0
+CHUNK_OVERLAP_SECONDS = 2.0
+
+# Frames per block when streaming a stem back off disk (subtraction, copies).
+# 1<<20 frames is 8 MB of stereo float32: big enough to keep I/O cheap, small
+# enough to stay invisible next to the source array.
+STREAM_BLOCK_FRAMES = 1 << 20
+
 FOUR_STEMS: Tuple[str, ...] = ("drums", "bass", "other", "vocals")
 
 MODEL_CONFIGS: Dict[str, Dict] = {

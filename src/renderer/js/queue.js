@@ -29,6 +29,9 @@ function createJob(fileInfo) {
         detail: detail,
         error: null,
         outputPath: null,
+        // Channel downmixes and mono notices: shown on the row, not only in
+        // the debug log.
+        warnings: [],
     };
 }
 
@@ -93,28 +96,24 @@ async function processQueue() {
         state.currentJobId = job.id;
         updateJob(job.id, {
             status: 'processing',
-            detail: 'Initializing...',
-            progress: 0
+            detail: getDict().job_initializing,
+            progress: 0,
+            warnings: [],
         });
 
         logConsole(`Processing: ${job.file.name}`);
 
         try {
-            // Global settings. The quality select maps to the motor's
-            // preset; the model select is an optional override.
-            const options = {
-                mode: elements.optMode.value,
-                preset: elements.optQuality.value,
-                model: elements.optModel.value,
-                device: elements.optDevice.value,
-                format: elements.optFormat.value,
-            };
+            // Only the mode is decided here (it follows the active tab);
+            // everything else comes from the persisted settings, which the
+            // main process merges in and validates.
+            const options = { mode: elements.optMode.value };
 
             // One call per job: the promise settles with the motor's
             // terminal event (success / error / cancelled).
             const result = await bridge.runJob({
                 inputPath: job.file.path,
-                outputDir: null, // Same directory as the input
+                outputDir: null, // Resolved from the settings by the main process
                 options
             });
 
@@ -127,6 +126,7 @@ async function processQueue() {
                     progress: 100,
                     detail: `✅ ${interpolate(dict.job_completed, { time: result.elapsedSeconds?.toFixed(1) })}`,
                     outputPath: result.outputDir || null,
+                    warnings: (result.stats && result.stats.warnings) || job.warnings,
                 });
             } else if (result.status === 'cancelled') {
                 logConsole(interpolate(dict.console_job_cancelled, { id: job.id }));
