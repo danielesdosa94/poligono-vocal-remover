@@ -306,9 +306,10 @@ elements.optBitDepth.addEventListener('change', async () => {
 
 elements.optOutputMode.addEventListener('change', async () => {
     const mode = elements.optOutputMode.value;
-    if (mode === 'folder' && !(getSettings() || {}).outputDir) {
-        // Nothing chosen yet: ask straight away instead of leaving the app in
-        // a state where "custom folder" means "no folder".
+    if (mode === 'folder' && !hasUsableOutputDir()) {
+        // Nothing usable chosen: a first run, or a folder renamed or unplugged
+        // since. Ask straight away instead of saving a mode that sanitize()
+        // would immediately reject, which would strand the dropdown.
         await chooseOutputFolder();
         return;
     }

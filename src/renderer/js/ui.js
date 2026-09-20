@@ -211,6 +211,10 @@ function updateLanguage(lang) {
         }
     });
 
+    // The output path is data, not a label, so it carries no data-i18n and the
+    // loop above cannot reach it. Re-render it here to pick up the new dict.
+    renderOutputDir();
+
     // Update queue stats manually (has dynamic content)
     updateQueueStats();
 

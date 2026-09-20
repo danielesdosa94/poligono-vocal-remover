@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "test:js": "node --test tests/settings.test.js",
     "dev": "electron . --enable-logging",
     "build": "electron-builder",
     "dist": "electron-builder",

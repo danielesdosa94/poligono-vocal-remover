@@ -912,14 +912,15 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 6px;
 }
 
 .output-dir-path {
     flex: 1;
     min-width: 0;
     font-size: 11px;
-    color: var(--color-text-secondary);
+    color: var(--color-text-muted);
+    line-height: 1.4;
     /* Long Windows paths: keep the end visible, it is the telling part. */
     direction: rtl;
     text-align: left;

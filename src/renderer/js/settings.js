@@ -90,6 +90,15 @@ function renderPresetLabels() {
 }
 
 /**
+ * Whether a custom output folder is both chosen and reachable. The picker
+ * opens on its own when it is not, so a path that went stale can never leave
+ * the dropdown stuck on an option the settings would refuse to save.
+ */
+function hasUsableOutputDir() {
+    return Boolean(appSettings && appSettings.outputDir) && outputDirUsable;
+}
+
+/**
  * Show where the output is going.
  */
 function renderOutputDir(usable = outputDirUsable) {

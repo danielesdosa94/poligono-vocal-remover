@@ -74,7 +74,10 @@ let filePath = null;
 
 function settingsPath() {
     if (!filePath) {
-        filePath = path.join(app.getPath('userData'), FILE_NAME);
+        // POLIGONO_SETTINGS_DIR points the file somewhere else for the tests.
+        // The app itself never sets it.
+        const dir = process.env.POLIGONO_SETTINGS_DIR || app.getPath('userData');
+        filePath = path.join(dir, FILE_NAME);
     }
     return filePath;
 }
@@ -104,8 +107,15 @@ function sanitize(raw) {
     }
 
     // A folder that no longer exists (an unplugged drive, a renamed path)
-    // must not send every job to an unwritable location.
-    if (result.outputMode === 'folder' && !isUsableDirectory(result.outputDir)) {
+    // must not send every job to an unwritable location -- and it must not
+    // linger either. A stale path that fails every later validation is what
+    // jams the picker: "a folder is set" and "that folder can be used" stop
+    // meaning the same thing, so the UI reads the first, tries to switch to
+    // folder mode, and this function keeps bouncing it back to 'beside'.
+    // Clearing both together keeps the two in step: folder mode is only ever
+    // persisted next to a directory that is actually there.
+    if (!isUsableDirectory(result.outputDir)) {
+        result.outputDir = null;
         result.outputMode = 'beside';
     }
     return result;
