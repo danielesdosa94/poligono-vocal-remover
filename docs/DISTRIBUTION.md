@@ -91,6 +91,43 @@ al final la URL completa que quedó grabada. Compruébala antes de publicar.
 El servidor debe permitir descargas de 2.2 GB por HTTPS con `Content-Length`
 correcto y sin caducidad de enlace.
 
+### Si el `.exe` arranca pero falla al cargar el modelo
+
+Síntoma: el motor responde `ready` y `pong` sin problema, y la primera
+separación muere con
+
+```
+ModuleNotFoundError: No module named 'numpy.core.multiarray'
+```
+
+(o cualquier otro módulo, en `torch.load` → `unpickler.load()` → `find_class`).
+
+**Qué pasa.** Los checkpoints `.th` de Demucs se serializaron cuando numpy
+todavía llamaba `numpy.core` a su núcleo. numpy 2.0 lo renombró a
+`numpy._core` y dejó `numpy/core/` como shim de compatibilidad. Verificado
+sobre los checkpoints instalados: **5 de 9 referencian
+`numpy.core.multiarray`**.
+
+El `hook-numpy.py` de PyInstaller, para numpy ≥ 2.0, solo añade
+`numpy._core._dtype_ctypes` y `numpy._core._multiarray_tests`. Como nada en
+el código importa el shim por su nombre, el grafo de módulos no lo ve y no se
+empaqueta.
+
+**Cómo está resuelto.** `python\motor.spec` recoge el paquete shim entero con
+`collect_submodules("numpy.core")` (19 módulos `.py` minúsculos). No hace
+falta runtime hook: el shim de numpy hace el redireccionamiento bien, solo
+había que incluirlo.
+
+**Lo importante para el futuro:** `ping` → `pong` **no detecta esta clase de
+fallo**, porque el motor arranca perfectamente sin esos módulos. Por eso
+`build.ps1` comprueba además, contra el TOC del Analysis, que los módulos que
+solo se alcanzan por pickle o import dinámico están dentro
+(`Test-BundledModules`). Si aparece otro, se añade a esa lista y a
+`hiddenimports` en el spec.
+
+Y por eso el checklist de release exige **separar un archivo de verdad** antes
+de publicar, no solo abrir la aplicación.
+
 ### Si el build falla en `Cannot create symbolic link`
 
 Síntoma, al llegar a electron-builder:
@@ -386,8 +423,12 @@ Dos advertencias antes de meterse:
 - [ ] Subir la versión en `package.json`.
 - [ ] **`build.nsisWeb.appPackageUrl` apunta a la carpeta real de descargas**,
       con barra final. El build se niega a correr si sigue el placeholder.
-- [ ] `.\scripts\build.ps1 -Clean` completo, y que el smoke test diga
-      `motor.exe answered pong`.
+- [ ] `.\scripts\build.ps1 -Clean` completo, y que diga
+      `bundled modules OK` y `motor.exe answered pong`.
+- [ ] **Separar un archivo de verdad con el `.exe` empaquetado**, no solo
+      abrirlo: `pong` no carga ningún modelo y no detecta una dependencia de
+      checkpoint que falte. Comprobar que el `vocals.wav` sale al mismo
+      sample rate y con el mismo número de frames que la fuente.
 - [ ] **Subir el `.nsis.7z` a la URL de descargas ANTES de publicar el
       `.exe`.** Un instalador cuyo paquete no está todavía en su sitio falla
       en cada intento, sin diagnóstico útil para el cliente.

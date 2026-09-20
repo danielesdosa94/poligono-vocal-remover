@@ -77,6 +77,33 @@ datas += collect_data_files("demucs")
 hiddenimports += collect_submodules("demucs")
 
 # =============================================================================
+# numpy legacy pickle shims
+# =============================================================================
+
+# Demucs' .th checkpoints were pickled when numpy still called its core
+# `numpy.core`; numpy 2.0 renamed it to `numpy._core` and left `numpy/core/`
+# behind as a shim whose own source says the entries "must import without
+# warning or error from numpy.core.multiarray to support old pickle files".
+#
+# Verified against the installed checkpoints: 5 of the 9 reference
+# `numpy.core.multiarray`, and torch.load() imports it while unpickling. So
+# the failure is not at startup but at the first separation, with
+#
+#     ModuleNotFoundError: No module named 'numpy.core.multiarray'
+#
+# PyInstaller's bundled hook-numpy.py only adds `numpy._core._dtype_ctypes`
+# and `numpy._core._multiarray_tests` for numpy >= 2.0, and nothing in our
+# code imports the shim by name, so the module graph never sees it: the build
+# collected only `numpy.core` and `numpy.core._utils`.
+#
+# The whole shim package goes in rather than just `multiarray`. It is 19 tiny
+# pure-Python modules, and naming one would leave the same trap set for the
+# next legacy pickle (another model, a future checkpoint). No runtime hook is
+# needed to alias numpy.core -> numpy._core: numpy's own shim does that
+# correctly once it is actually present.
+hiddenimports += collect_submodules("numpy.core")
+
+# =============================================================================
 # Analysis
 # =============================================================================
 

@@ -126,6 +126,53 @@ function Initialize-WinCodeSignCache {
     }
 }
 
+<#
+.SYNOPSIS
+    Assert that modules only reached through pickles or dynamic imports made
+    it into the bundle.
+
+.DESCRIPTION
+    These are the ones PyInstaller's module graph cannot see, so nothing but
+    an explicit check notices when they go missing. The ping/pong smoke test
+    below does not: the motor starts perfectly well without them and only
+    fails later, on the first separation, in a customer's hands.
+
+    numpy.core.multiarray is the one that actually bit us. Demucs' .th
+    checkpoints were pickled against pre-2.0 numpy, torch.load() imports that
+    module path while unpickling, and PyInstaller's numpy hook does not
+    collect the compat shim.
+#>
+function Test-BundledModules {
+    $toc = Join-Path $RepoRoot 'build\pyinstaller\motor\Analysis-00.toc'
+    if (-not (Test-Path $toc)) {
+        Write-Warning '  Analysis TOC not found; skipping the bundled-module check'
+        return
+    }
+
+    $required = @(
+        'numpy.core.multiarray',   # legacy pickle path in Demucs checkpoints
+        'numpy.core.numeric',
+        'demucs.htdemucs',         # model classes, reached through the pickle
+        'demucs.hdemucs',
+        'demucs.states',
+        'torchaudio'               # imported at module level by demucs/api.py
+    )
+
+    $content = Get-Content $toc -Raw
+    $missing = $required | Where-Object { $content -notmatch [regex]::Escape("'$_'") }
+
+    if ($missing) {
+        throw @"
+These modules are missing from the bundle:
+    $($missing -join "`n    ")
+They are only reachable through pickles or dynamic imports, so the motor will
+start fine and then fail on the first separation. Add them to hiddenimports in
+python\motor.spec.
+"@
+    }
+    Write-Host "  bundled modules OK ($($required.Count) checked)"
+}
+
 function Get-DirectorySize([string]$Path) {
     if (-not (Test-Path $Path)) { return 0 }
     $measured = Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue |
@@ -213,6 +260,7 @@ if ($SkipMotor) {
     if (-not (Test-Path $MotorExe)) { throw "PyInstaller reported success but $MotorExe is missing." }
     Write-Host ('  built in {0:N0}s' -f ((Get-Date) - $started).TotalSeconds)
     Write-Host "  dist\motor  $(Format-Size (Get-DirectorySize $MotorDist))"
+    Test-BundledModules
 }
 
 # -----------------------------------------------------------------------------
@@ -229,6 +277,11 @@ if ($pong) {
     Write-Warning '  motor.exe did NOT answer pong. The installer will be built anyway, but test it before shipping.'
     Write-Warning "  Reproduce with:  '{\"type\":\"ping\"}' | & '$MotorExe'"
 }
+# pong only proves the process starts and speaks the protocol. It does NOT
+# load a model, so it cannot catch a missing checkpoint dependency - that is
+# what Test-BundledModules is for, and what the manual separation in the
+# release checklist is for.
+Write-Host '  (pong does not load a model; separate a real file before shipping)'
 
 # -----------------------------------------------------------------------------
 # 3. Installer
