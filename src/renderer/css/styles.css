@@ -90,7 +90,9 @@ body {
 
 .app-container {
     display: grid;
-    grid-template-rows: var(--header-height) var(--brand-height) 30px 1fr;
+    /* minmax(0, ...): without it the last row refuses to shrink below its
+       content and the inner scroll containers never get a bounded height. */
+    grid-template-rows: var(--header-height) var(--brand-height) 30px minmax(0, 1fr);
     height: 100vh;
     overflow: hidden;
 }
@@ -205,6 +207,7 @@ body {
 .main {
     display: grid;
     grid-template-columns: var(--panel-width) 1fr;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -218,31 +221,38 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+    /* The whole column scrolls, so a short window can never cut off the
+       Start Queue button at the bottom. */
+    overflow-y: auto;
+}
+
+.panel-control::-webkit-scrollbar {
+    width: 6px;
+}
+
+.panel-control::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+.panel-control::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
 }
 
 .control-section {
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--color-border);
+    /* Sections keep their natural height; the panel scrolls instead. */
+    flex-shrink: 0;
 }
 
+/* Kept as the section that absorbs spare height when the window is tall;
+   it no longer owns a scrollbar of its own. */
 .control-section--scrollable {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: visible !important;
+    flex: 1 0 auto;
+    overflow: visible !important;
     padding: var(--spacing-lg) var(--spacing-md) !important;
-}
-
-.control-section--scrollable::-webkit-scrollbar {
-    width: 6px;
-}
-
-.control-section--scrollable::-webkit-scrollbar-track {
-    background: var(--color-bg);
-}
-
-.control-section--scrollable::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 3px;
 }
 
 .control-section--actions {
@@ -464,10 +474,12 @@ body {
     background: var(--color-bg);
     display: flex;
     flex-direction: column;
+    min-height: 0;
     overflow: hidden;
 }
 
 .queue-header {
+    flex-shrink: 0;
     padding: var(--spacing-lg) var(--spacing-xl);
     border-bottom: 1px solid var(--color-border);
     background: var(--color-panel);
@@ -494,6 +506,7 @@ body {
 
 .job-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto; /* SCROLL INTERNO AQUÍ */
     overflow-x: hidden;
     padding: var(--spacing-lg);
@@ -744,6 +757,7 @@ body {
    ========================================================================= */
 
 .console-details {
+    flex-shrink: 0;
     border-top: 1px solid var(--color-border);
     background: var(--color-panel);
 }
@@ -848,9 +862,10 @@ body {
 
 .settings-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    /* No max-width: the cards spread over whatever the window gives them,
+       instead of leaving dead space to the right of the last card. */
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: var(--spacing-lg);
-    max-width: 1000px;
 }
 
 .settings-card {
@@ -895,6 +910,29 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
+    min-height: 0;
+}
+
+/* Settings is a plain scrolling document, not a flex column: as a flex item
+   the grid shrank instead of overflowing, so nothing could be scrolled to.
+   Specificity has to beat .view.active, which comes later in the file. */
+.settings-panel.view.active {
+    display: block;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.settings-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.settings-panel::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+.settings-panel::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
 }
 
 /* ============================================================================
@@ -908,19 +946,27 @@ body {
     line-height: 1.4;
 }
 
+/* The path is the widest thing in a 320px column, so it gets its own line
+   above the Browse button instead of competing with it for the row. Width
+   and centring match .form-select so the column reads as one stack. */
 .output-dir-row {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 6px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    width: 96%;
+    margin: var(--spacing-sm) auto var(--spacing-xs);
 }
 
 .output-dir-path {
-    flex: 1;
+    width: 100%;
     min-width: 0;
     font-size: 11px;
-    color: var(--color-text-muted);
-    line-height: 1.4;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    /* Hold the line open while no folder is set, so the button does not
+       jump when a path appears. */
+    min-height: 17px;
     /* Long Windows paths: keep the end visible, it is the telling part. */
     direction: rtl;
     text-align: left;
@@ -937,6 +983,9 @@ body {
 .btn-small {
     padding: 6px 12px;
     font-size: 11px;
+    /* .btn is width: 100%: left as is, the button claimed the whole row and
+       squeezed .output-dir-path down to zero width. */
+    width: auto;
     flex: 0 0 auto;
 }
 
