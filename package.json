@@ -73,7 +73,7 @@
       "icon": "src/renderer/assets/icon.ico"
     },
     "nsisWeb": {
-      "appPackageUrl": "https://REPLACE-ME.poligonostudio.com/aihub/",
+      "appPackageUrl": "https://poligonostudio.com/downloads/aihub/",
       "artifactName": "Poligono-AI-Hub-${version}-Setup.${ext}",
       "oneClick": false,
       "perMachine": true,
