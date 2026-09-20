@@ -1,6 +1,6 @@
 {
   "name": "poligono-ai-hub",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Local AI stem separation for audio and video: vocal remover and 4-stem splitter, powered by Demucs v4. Runs entirely on your machine.",
   "main": "src/background.js",
   "author": "Polígono Studio",
@@ -64,16 +64,17 @@
     "win": {
       "target": [
         {
-          "target": "nsis",
+          "target": "nsis-web",
           "arch": [
             "x64"
           ]
         }
       ],
-      "icon": "src/renderer/assets/icon.ico",
-      "artifactName": "Poligono-AI-Hub-${version}-Setup.${ext}"
+      "icon": "src/renderer/assets/icon.ico"
     },
-    "nsis": {
+    "nsisWeb": {
+      "appPackageUrl": "https://REPLACE-ME.poligonostudio.com/aihub/",
+      "artifactName": "Poligono-AI-Hub-${version}-Setup.${ext}",
       "oneClick": false,
       "perMachine": true,
       "allowToChangeInstallationDirectory": true,

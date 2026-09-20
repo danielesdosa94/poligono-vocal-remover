@@ -119,6 +119,15 @@ def find_ffmpeg(ffmpeg_path: Optional[str] = None) -> Tuple[Optional[str], Optio
     candidates: List[str] = []
     if ffmpeg_path:
         candidates.append(ffmpeg_path)
+    # Frozen: motor.exe sits at <resources>/motor/motor.exe and ffmpeg at
+    # <resources>/bin/ffmpeg/. Electron passes --ffmpeg-path so this is a
+    # backstop, but without it a missing argument would fall through to
+    # whatever ffmpeg happens to be on PATH - which on a developer machine is
+    # usually one, and on a customer's machine is usually none. That is a bug
+    # that only ever shows up after shipping.
+    if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).resolve().parent
+        candidates.append(str(exe_dir.parent / "bin" / "ffmpeg" / _exe("ffmpeg")))
     candidates.append(str(_repo_root() / "resources" / "bin" / "ffmpeg" / _exe("ffmpeg")))
     on_path = shutil.which("ffmpeg")
     if on_path:

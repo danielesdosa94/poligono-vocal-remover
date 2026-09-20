@@ -41,8 +41,114 @@ resultado en `dist\motor`. Siempre desde la raíz del repo. El `--workpath`
 explícito evita que PyInstaller ensucie `build\`, que electron-builder lee
 como su `buildResources`.
 
-El instalador queda en `release\Poligono-AI-Hub-<versión>-Setup.exe`
-(nombre ASCII sin espacios a propósito: va a ser una URL).
+### El build produce DOS archivos, y hay que subir los dos
+
+```
+release\nsis-web\Poligono-AI-Hub-1.1.0-Setup.exe      0.74 MB   <- lo que descarga el cliente
+release\nsis-web\poligono-ai-hub-1.1.0-x64.nsis.7z    2.21 GB   <- lo que descarga el instalador
+```
+
+Ojo con el subdirectorio: `nsis-web` escribe en `release\nsis-web\`, no en
+`release\`. `build.ps1` borra los artefactos viejos antes de construir y se
+niega a nombrar ninguno si encuentra más de un instalador, porque un `.exe`
+huérfano de un build anterior es indistinguible a simple vista del bueno.
+
+El target es **`nsis-web`**, no `nsis`. El instalador no lleva la aplicación
+dentro: la descarga durante la instalación desde la URL que tiene grabada.
+
+**Por qué.** La aplicación comprimida son 2.21 GB y `makensis.exe` es un
+proceso de **32 bits**: no puede mapear en memoria un archivo de ese tamaño en
+un espacio de direcciones de 2 GB. Falla con
+
+```
+File: failed creating mmap of "...\poligono-ai-hub-1.1.0-x64.nsis.7z"
+```
+
+No es configurable: NSIS tampoco soporta instaladores de más de 2 GB aunque
+pudiera mapearlo. Y de los 4.81 GB sin comprimir, **2.8 GB son DLL de CUDA que
+son dependencias de carga de `torch_cuda.dll`** y no se pueden quitar sin
+romper la GPU (`cublasLt` 643 MB, `cusparse` 362 MB, `cufft` 263 MB,
+`cusolver` 215 MB, `cublas` 108 MB, más `torch_cuda` 981 MB y `torch_cpu`
+244 MB). Podando lo demás no se bajaba de 2 GB con margen sano.
+
+### La URL del paquete
+
+`build.nsisWeb.appPackageUrl` en `package.json` es la carpeta donde se va a
+alojar el `.nsis.7z`, **con barra final**:
+
+```json
+"appPackageUrl": "https://tu-hosting/aihub/"
+```
+
+El instalador pedirá `<appPackageUrl><nombre del .nsis.7z>`. Esa URL exacta
+tiene que servir ese archivo exacto.
+
+Si te equivocas, el build sale perfecto y **fallan todas las instalaciones**,
+semanas después y sin nada a lo que recurrir. Por eso `build.ps1` se niega a
+construir mientras la URL siga siendo el placeholder `REPLACE-ME`, e imprime
+al final la URL completa que quedó grabada. Compruébala antes de publicar.
+
+El servidor debe permitir descargas de 2.2 GB por HTTPS con `Content-Length`
+correcto y sin caducidad de enlace.
+
+### Si el build falla en `Cannot create symbolic link`
+
+Síntoma, al llegar a electron-builder:
+
+```
+• signing with signtool.exe  path=release\win-unpacked\resources\motor\motor.exe
+• downloading  url=...winCodeSign-2.6.0.7z
+⨯ cannot execute  cause=exit status 2
+  errorOut=ERROR: Cannot create symbolic link : A required privilege is not
+  held by the client. : ...\winCodeSign\...\darwin\10.12\lib\libcrypto.dylib
+```
+
+**Qué pasa.** electron-builder intenta firmar cada `.exe` que va en
+`extraResources` (`motor.exe`, `ffmpeg.exe`, `ffprobe.exe`, y un `protoc.exe`
+que arrastra PyTorch). Para eso resuelve la ruta de su paquete `winCodeSign`
+**antes** de comprobar si hay certificado, así que lo descarga aunque el
+build sea sin firmar. Ese paquete es un `.7z` que contiene **symlinks de
+macOS** (`libcrypto.dylib`, `libssl.dylib`). Crear un symlink en Windows
+exige el privilegio `SeCreateSymbolicLinkPrivilege`, que un usuario normal no
+tiene si el Modo de desarrollador está apagado, y la extracción falla.
+
+Los dos `.dylib` son de macOS y aquí no sirven para nada.
+
+**Cómo está resuelto.** `scripts\build.ps1` (función
+`Initialize-WinCodeSignCache`) descarga el `.7z` y lo extrae él mismo
+**saltándose el árbol `darwin`**, directamente en el directorio donde
+electron-builder busca:
+
+```
+%LOCALAPPDATA%\electron-builder\Cache\winCodeSign\winCodeSign-2.6.0\
+```
+
+Al encontrarlo cacheado, electron-builder no descarga ni extrae nada y el
+build sigue. Si la función falla, avisa y continúa: se vuelve al
+comportamiento de antes, con un error claro.
+
+Esto se arregla en el script y no en la configuración a propósito: es un
+problema del entorno, no del producto, y así la firma seguirá funcionando el
+día que se active sin tener que deshacer nada.
+
+**La versión está fijada** a `winCodeSign-2.6.0`, que es la que pide
+electron-builder 26.4.0. Si se actualiza electron-builder y pasa a pedir otra,
+la función deja de coincidir, electron-builder intenta bajarla por su cuenta y
+el error vuelve. En ese caso: actualizar `$version` en `build.ps1`, o bien
+
+1. Activar **Modo de desarrollador** en Windows (Configuración → Sistema →
+   Para programadores → Modo de desarrollador). Concede el privilegio al
+   usuario y no hace falta nada más.
+2. O correr el build **una vez** en un PowerShell como administrador.
+
+Para comprobar si el privilegio está concedido:
+
+```powershell
+$t = Join-Path $env:TEMP 'symtest'; New-Item -ItemType Directory $t -Force | Out-Null
+Set-Content (Join-Path $t 'real.txt') 'x'
+New-Item -ItemType SymbolicLink -Path (Join-Path $t 'link.txt') -Target (Join-Path $t 'real.txt')
+Remove-Item -Recurse -Force $t
+```
 
 ---
 
@@ -66,32 +172,37 @@ Las cinco DLL más grandes:
 269 MB  cudnn_adv64_9.dll
 ```
 
-**Espera un instalador de ~2–2.5 GB.** NSIS comprime con LZMA y las DLL de
-CUDA bajan más o menos a la mitad. Anota aquí el tamaño real del primer
-build:
+Medido en el build 1.1.0: `win-unpacked` 4.81 GB → paquete comprimido
+2.21 GB. Las DLL de CUDA bajan más o menos a la mitad con LZMA.
 
-| Versión | Fecha | `dist\motor` | Instalador |
-|---|---|---|---|
-| 1.0.2 | | | |
+| Versión | Fecha | `dist\motor` | `win-unpacked` | Paquete `.nsis.7z` |
+|---|---|---|---|---|
+| 1.1.0 | 2026-09-20 | 4.31 GB | 4.81 GB | 2.21 GB |
 
 ### Palancas de tamaño que NO se aplicaron en v1
 
-Documentadas porque son las únicas con impacto real, y porque las dos son
-arriesgadas:
+Con `nsis-web` ya no hay techo, así que esto dejó de ser urgente. Sigue
+mereciendo la pena por el ancho de banda y por la paciencia del cliente:
 
-- **Podar DLL de CUDA.** `cusolver` (215 MB), `cusolverMg` (150 MB) y
-  `cudnn_adv` (269 MB) no los usa la inferencia de Demucs, pero son
-  dependencias de carga de `torch_cuda.dll`: quitarlas impide que el DLL
-  cargue. Habría que probarlo DLL por DLL en una máquina limpia. ~600 MB en
-  juego.
-- **ffmpeg más pequeño.** Los binarios actuales son builds completos de 99 MB
-  cada uno. Uno compilado solo con los demuxers/encoders que usamos
-  (pcm, flac, lame, aac, y los demuxers de mp4/mkv/mov) baja de 20 MB.
-  ~150 MB en juego, riesgo bajo, es solo cuestión de encontrar el build.
+- **ffmpeg más pequeño.** La palanca más fácil con diferencia. Los binarios
+  actuales son builds completos de 99 MB cada uno. Uno compilado solo con lo
+  que usamos (pcm, flac, lame, aac, y los demuxers de mp4/mkv/mov) baja de
+  20 MB. **~150 MB, riesgo bajo**: es cuestión de encontrar el build.
+- **Podar DLL de CUDA que no son dependencias de carga.** Verificado con
+  `pefile` sobre la tabla de imports de `torch_cuda.dll`: `nvrtc` ×2 y
+  `nvjitlink` (240 MB, JIT para `torch.compile`, que Demucs no usa),
+  `curand` (69 MB) y `cusolverMg` (150 MB) no aparecen como imports de carga.
+  Con más riesgo, `cudnn_engines_precompiled` (490 MB) y `cudnn_adv`
+  (269 MB), que los carga el despachador de cuDNN en tiempo de ejecución.
+  **~1.2 GB en juego**, pero cada recorte hay que verificarlo separando de
+  verdad en GPU, no solo arrancando el motor: un kernel que falta puede no
+  dar la cara hasta cierto tamaño de segmento.
 
-Si en algún momento el instalador pasa de ~2 GB y NSIS empieza a dar
-problemas, la salida es `target: "nsis-web"`: un instalador pequeño que
-descarga el paquete grande aparte.
+Lo que **no** se puede tocar, porque son imports de carga de
+`torch_cuda.dll` y sin ellos el DLL no carga: `cublasLt` (643 MB),
+`cusparse` (362 MB), `cufft` (263 MB), `cusolver` (215 MB), `cublas`
+(108 MB), más `torch_cuda` (981 MB) y `torch_cpu` (244 MB). **2.8 GB
+intocables.**
 
 ---
 
@@ -127,6 +238,11 @@ aviso, la mitad de la gente cancela y pide el reembolso.
 >
 > El instalador te pedirá permisos de administrador, porque instala en
 > `C:\Program Files`.
+>
+> **El instalador descarga unos 2,2 GB** durante la instalación, así que
+> necesitas conexión mientras se instala. La primera vez que separes un
+> archivo se descargará además el modelo de IA (hasta 1 GB); después de eso,
+> la aplicación funciona sin internet.
 
 **English:**
 
@@ -144,6 +260,10 @@ aviso, la mitad de la gente cancela y pide el reembolso.
 >
 > The installer will ask for administrator permission, because it installs
 > into `C:\Program Files`.
+>
+> **The installer downloads about 2.2 GB** while it runs, so you need a
+> connection during installation. The first time you separate a file it will
+> also download the AI model (up to 1 GB); after that the app works offline.
 
 Poner ese bloque **en la propia página de descarga**, junto al botón, no
 escondido en un FAQ. Añadir una captura de la pantalla azul con el enlace
@@ -264,8 +384,15 @@ Dos advertencias antes de meterse:
 - [ ] `python -m pytest tests -q` en verde.
 - [ ] `npm run test:js` en verde.
 - [ ] Subir la versión en `package.json`.
+- [ ] **`build.nsisWeb.appPackageUrl` apunta a la carpeta real de descargas**,
+      con barra final. El build se niega a correr si sigue el placeholder.
 - [ ] `.\scripts\build.ps1 -Clean` completo, y que el smoke test diga
       `motor.exe answered pong`.
+- [ ] **Subir el `.nsis.7z` a la URL de descargas ANTES de publicar el
+      `.exe`.** Un instalador cuyo paquete no está todavía en su sitio falla
+      en cada intento, sin diagnóstico útil para el cliente.
+- [ ] Abrir `<appPackageUrl><nombre del .nsis.7z>` en un navegador desde otra
+      red y comprobar que descarga los 2.2 GB enteros.
 - [ ] Instalar en una **máquina limpia sin Python**: procesar un archivo en
       GPU y otro en CPU (Configuración → Dispositivo → Solo CPU).
 - [ ] Instalar en una ruta con acentos y espacios
