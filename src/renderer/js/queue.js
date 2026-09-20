@@ -29,9 +29,13 @@ function createJob(fileInfo) {
         detail: detail,
         error: null,
         outputPath: null,
-        // Channel downmixes and mono notices: shown on the row, not only in
-        // the debug log.
+        // Warnings the motor raises mid-run, already worded. Reset per run.
         warnings: [],
+        // Notices about the source itself, found by probing the file as it is
+        // queued. Stored as { key, values } so they follow the language, and
+        // kept apart from `warnings` because they describe the file, not the
+        // run: starting the job must not wipe them.
+        notices: [],
     };
 }
 
@@ -56,6 +60,7 @@ async function addFiles(filePaths) {
 
     logConsole(`Adding ${filePaths.length} file(s) to queue...`);
 
+    const added = [];
     for (const filePath of filePaths) {
         const info = await bridge.getFileInfo(filePath);
 
@@ -63,6 +68,7 @@ async function addFiles(filePaths) {
             const job = createJob(info);
             state.queue.push(job);
             renderJob(job);
+            added.push(job);
             logConsole(`Added: ${info.name}`);
         } else {
             logConsole(`Invalid file: ${basename(filePath)} - ${info.reason}`, 'error');
@@ -70,6 +76,61 @@ async function addFiles(filePaths) {
     }
 
     updateQueueStats();
+
+    // The rows are already on screen; the notices fill in behind them. All
+    // the probes go out at once, so dropping forty files does not turn into
+    // forty sequential ffprobe calls before the last row can say anything.
+    await Promise.all(added.map(job => attachSourceNotices(job)));
+}
+
+/**
+ * Motor warnings a notice on the row already covers, by notice key.
+ *
+ * The motor raises its own version of these mid-run, in English, and without
+ * it the row would say the same thing twice in two languages. Matching the
+ * shape of the motor's message is the coupling we accept for that; if its
+ * wording ever drifts the worst case is the duplicate line coming back, not
+ * a warning going missing.
+ */
+const NOTICE_SUPERSEDES = {
+    warning_multichannel: /channel source downmixed to stereo/i,
+};
+
+/**
+ * Drop the motor warnings that a notice on this row already states.
+ */
+function withoutSupersededWarnings(job, messages) {
+    const patterns = (job.notices || [])
+        .map(notice => NOTICE_SUPERSEDES[notice.key])
+        .filter(Boolean);
+    if (patterns.length === 0) return messages;
+    return messages.filter(message => !patterns.some(pattern => pattern.test(message)));
+}
+
+/**
+ * Flag anything about the source that changes what the client gets back.
+ *
+ * Runs at queue time, not at process time: a 5.1 source is downmixed to
+ * stereo, and whoever is after dialogue wants to know that while they can
+ * still go and extract the centre channel instead.
+ */
+async function attachSourceNotices(job) {
+    let info;
+    try {
+        info = await bridge.probeAudio(job.file.path);
+    } catch (error) {
+        // A file that cannot be probed is still perfectly queueable.
+        return;
+    }
+    if (!info || !info.ok) return;
+
+    const notices = [];
+    if (info.channels > 2) {
+        notices.push({ key: 'warning_multichannel', values: { channels: info.channels } });
+    }
+    if (notices.length > 0) {
+        updateJob(job.id, { notices });
+    }
 }
 
 // =====================================================================
@@ -126,7 +187,10 @@ async function processQueue() {
                     progress: 100,
                     detail: `✅ ${interpolate(dict.job_completed, { time: result.elapsedSeconds?.toFixed(1) })}`,
                     outputPath: result.outputDir || null,
-                    warnings: (result.stats && result.stats.warnings) || job.warnings,
+                    warnings: withoutSupersededWarnings(
+                        job,
+                        (result.stats && result.stats.warnings) || job.warnings
+                    ),
                 });
             } else if (result.status === 'cancelled') {
                 logConsole(interpolate(dict.console_job_cancelled, { id: job.id }));

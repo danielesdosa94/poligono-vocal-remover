@@ -199,11 +199,21 @@ class MotorDaemon:
         if self.parent_pid:
             self._watchdog.start()
 
-        cuda = {"available": bool(torch.cuda.is_available())}
+        # "available" is only PyTorch seeing a driver and a card; "usable" is
+        # the answer to whether this build can actually run kernels on it,
+        # decided by running one. A Pascal card against a wheel with no
+        # kernels for it is available and not usable, and the UI has to be
+        # able to tell the difference before it promises GPU speed.
+        from engine import probe_cuda
+
+        cuda = {"available": bool(torch.cuda.is_available()), "usable": False, "reason": None}
         if cuda["available"]:
             props = torch.cuda.get_device_properties(0)
             cuda["name"] = props.name
             cuda["vramGb"] = round(props.total_memory / 1024**3, 1)
+            cuda["capability"] = f"sm_{props.major}{props.minor}"
+            cuda["archList"] = list(torch.cuda.get_arch_list())
+            cuda["usable"], cuda["reason"] = probe_cuda()
 
         from engine import (
             CHUNK_MINUTES,
@@ -258,6 +268,11 @@ class MotorDaemon:
             },
             "frozen": bool(getattr(sys, "frozen", False)),
         })
+        if cuda["available"]:
+            self.session.emit_log(
+                f"GPU check: {'usable' if cuda['usable'] else 'NOT usable'} - {cuda['reason']}",
+                "info" if cuda["usable"] else "warning",
+            )
         if removed:
             self.session.emit_log(f"Removed {removed} stale temp folder(s) from a previous session", "debug")
 

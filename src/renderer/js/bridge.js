@@ -46,6 +46,7 @@ function formatBytes(bytes) {
 const bridge = {
     openFiles: () => preloadApi.openFiles(),
     getFileInfo: (filePath) => preloadApi.getFileInfo(filePath),
+    probeAudio: (filePath) => preloadApi.probeAudio(filePath),
     getSettings: () => preloadApi.getSettings(),
     saveSettings: (patch) => preloadApi.saveSettings(patch),
     chooseOutputDir: () => preloadApi.chooseOutputDir(),

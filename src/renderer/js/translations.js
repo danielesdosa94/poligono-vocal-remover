@@ -55,6 +55,9 @@ const translations = {
         job_action_open: 'Open folder',
         job_action_remove: 'Remove',
 
+        // Source notices, shown on the job row as soon as the file is queued
+        warning_multichannel: '{channels}-channel source: it will be downmixed to stereo. For dialogue, extract the centre channel first.',
+
         // Empty State
         empty_queue: 'No files in queue',
 
@@ -208,6 +211,9 @@ const translations = {
         // Job Actions
         job_action_open: 'Abrir carpeta',
         job_action_remove: 'Eliminar',
+
+        // Avisos sobre la fuente, en la fila desde que se encola el archivo
+        warning_multichannel: 'Fuente de {channels} canales: se mezclará a estéreo. Para diálogo, extrae antes el canal central.',
 
         // Empty State
         empty_queue: 'No hay archivos en la cola',

@@ -130,10 +130,18 @@ elements.jobList.addEventListener('click', async (e) => {
 // =====================================================================
 
 bridge.onMotorEvent('ready', (data) => {
-    const gpu = data.cuda && data.cuda.available
-        ? `${data.cuda.name} (${data.cuda.vramGb} GB)`
-        : 'CPU only';
-    logConsole(`Separation engine ready: ${gpu}, torch ${data.torch}`);
+    const cuda = data.cuda || {};
+    // A GPU that is present but cannot run this build is the case worth
+    // spelling out: without it the log would promise GPU speed and the job
+    // would quietly run on the CPU.
+    let gpu = 'CPU only';
+    if (cuda.available && cuda.usable) {
+        gpu = `${cuda.name} (${cuda.vramGb} GB)`;
+    } else if (cuda.available) {
+        gpu = `${cuda.name} present but unusable, running on CPU`;
+    }
+    logConsole(`Separation engine ready: ${gpu}, torch ${data.torch}`,
+        cuda.available && !cuda.usable ? 'warn' : 'info');
     // The motor is the authority on presets and formats; adopt its tables so
     // the labels and the bit depth choices cannot drift from the engine.
     adoptMotorCapabilities(data);
@@ -191,10 +199,12 @@ bridge.onMotorEvent('warning', (data) => {
     logConsole(`⚠️ ${data.message}`, 'warn');
     // Anything that changes what the client actually receives (a 5.1 downmix,
     // a mono source) belongs on the job row too.
+    // ...unless a notice found at queue time already says it, in which case
+    // the row would repeat itself in two languages.
     const job = state.queue.find(j => j.id === state.currentJobId);
-    if (job && !job.warnings.includes(data.message)) {
-        updateJob(job.id, { warnings: [...job.warnings, data.message] });
-    }
+    if (!job || job.warnings.includes(data.message)) return;
+    if (withoutSupersededWarnings(job, [data.message]).length === 0) return;
+    updateJob(job.id, { warnings: [...job.warnings, data.message] });
 });
 
 // Job outcome (success / error / cancelled) is handled by the result of

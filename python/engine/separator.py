@@ -88,9 +88,85 @@ class JobResult:
     channels_out: int = 2
 
 
+# A CUDA device PyTorch can see is not necessarily one this build can run.
+# The wheel carries compiled kernels for a fixed set of architectures
+# (torch.cuda.get_arch_list()); a card outside that set, or a driver too old
+# for the runtime, fails at the first kernel launch and not at
+# is_available(). So the question "can we use CUDA?" is answered by using it,
+# once per process, and the verdict is cached: building a CUDA context costs
+# a second or two and poisoning it costs the job.
+_cuda_probe_lock = threading.Lock()
+_cuda_probe: Optional[Tuple[bool, str]] = None
+
+
+def _build_arch_list() -> str:
+    """The architectures this torch build ships kernels for, for the log."""
+    try:
+        return ", ".join(torch.cuda.get_arch_list()) or "none"
+    except Exception:  # noqa: BLE001 - a CPU-only build has no arch list
+        return "unknown"
+
+
+def _run_cuda_probe() -> Tuple[bool, str]:
+    """Run one real kernel on the GPU. Returns (usable, reason)."""
+    try:
+        name = torch.cuda.get_device_name(0)
+        major, minor = torch.cuda.get_device_capability(0)
+        capability = f"sm_{major}{minor}"
+    except Exception as exc:  # noqa: BLE001 - a broken driver lands here
+        return False, f"GPU present but its properties cannot be read ({type(exc).__name__}: {exc})"
+
+    try:
+        # Small, but a real allocation and a real kernel launch. .item()
+        # synchronises, which is what turns CUDA's asynchronous error
+        # reporting into an exception here rather than halfway through a job.
+        probe = torch.zeros(64, 64, device="cuda")
+        (probe @ probe).sum().item()
+        torch.cuda.synchronize()
+        del probe
+    except Exception as exc:  # noqa: BLE001 - any CUDA failure means "use the CPU"
+        return False, (
+            f"{name} ({capability}) cannot run this build, which is compiled for "
+            f"{_build_arch_list()} [{type(exc).__name__}: {exc}]"
+        )
+    finally:
+        try:
+            torch.cuda.empty_cache()
+        except Exception:  # noqa: BLE001 - cleanup must not mask the verdict
+            pass
+
+    return True, f"{name} ({capability}); build supports {_build_arch_list()}"
+
+
+def probe_cuda(force: bool = False) -> Tuple[bool, str]:
+    """
+    Whether CUDA is actually usable here, decided by running something on it.
+
+    Returns:
+        (usable, reason). The reason is always worth logging: it names the
+        device and its compute capability, and on a failure it says what went
+        wrong and what the build does support.
+    """
+    global _cuda_probe
+    with _cuda_probe_lock:
+        if _cuda_probe is None or force:
+            _cuda_probe = _run_cuda_probe()
+        return _cuda_probe
+
+
 def resolve_device(requested: str = "auto") -> Tuple[str, Optional[str]]:
     """
-    Pick the compute device.
+    Pick the compute device, and say why when it is not the obvious one.
+
+    "auto" must never pick a GPU that cannot run: torch.cuda.is_available()
+    answers "is there a driver and a card", which stays True on a card this
+    build has no kernels for right up until the first matmul raises. So
+    anything that is not an explicit "cpu" goes through probe_cuda(), and an
+    unusable GPU becomes a slower CPU job with a line in the log instead of a
+    failed one.
+
+    A machine with no NVIDIA GPU at all is not a fallback and gets no
+    warning on "auto"; there is nothing surprising to report.
 
     Returns:
         (device, warning) where warning explains a fallback to CPU, if any.
@@ -98,11 +174,16 @@ def resolve_device(requested: str = "auto") -> Tuple[str, Optional[str]]:
     requested = (requested or "auto").lower()
     if requested == "cpu":
         return "cpu", None
-    if torch.cuda.is_available():
+
+    if not torch.cuda.is_available():
+        if requested == "cuda":
+            return "cpu", "GPU requested but no NVIDIA GPU is visible; using CPU (slower)"
+        return "cpu", None
+
+    usable, reason = probe_cuda()
+    if usable:
         return "cuda", None
-    if requested == "cuda":
-        return "cpu", "CUDA requested but not available; falling back to CPU"
-    return "cpu", None
+    return "cpu", f"GPU not compatible with this build, using CPU (slower): {reason}"
 
 
 def describe_device(device: str) -> str:
@@ -186,7 +267,11 @@ class SeparationEngine:
             # throughput on Ampere and newer.
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-        self._log(f"Compute device: {describe_device(self.device)}", "info")
+            # The probe already ran inside resolve_device(); this is its
+            # verdict, so the log says which device was picked AND why.
+            self._log(f"Compute device: GPU — {probe_cuda()[1]}", "info")
+        else:
+            self._log(f"Compute device: {describe_device(self.device)}", "info")
 
     # ------------------------------------------------------------------ cancel
 

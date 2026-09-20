@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 import soundfile as sf
 
+import torch
+
 from engine import (
     MODES,
     SeparationCancelled,
@@ -19,9 +21,12 @@ from engine import (
     load_audio,
     mix_stems,
     probe,
+    probe_cuda,
+    resolve_device,
     subtract_from_source,
     write_stem,
 )
+from engine import separator as engine_separator
 
 ENGINE_DIR = Path(__file__).resolve().parents[1] / "python" / "engine"
 
@@ -35,6 +40,72 @@ def test_engine_has_no_forbidden_audio_backends():
     for source in ENGINE_DIR.glob("*.py"):
         text = source.read_text(encoding="utf-8")
         assert not forbidden.search(text), f"{source.name} references a forbidden backend"
+
+
+# =============================================================================
+# Device resolution
+# =============================================================================
+
+def test_resolve_device_never_probes_when_cpu_was_asked_for(monkeypatch):
+    monkeypatch.setattr(
+        engine_separator,
+        "probe_cuda",
+        lambda *a, **k: pytest.fail("probe_cuda must not run for device='cpu'"),
+    )
+    assert resolve_device("cpu") == ("cpu", None)
+
+
+def test_resolve_device_falls_back_when_the_gpu_cannot_run_this_build(monkeypatch):
+    """The GTX 10xx case: a card torch can see but has no kernels for."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(
+        engine_separator,
+        "probe_cuda",
+        lambda *a, **k: (False, "GeForce GTX 1060 (sm_61) cannot run this build"),
+    )
+
+    device, warning = resolve_device("auto")
+
+    assert device == "cpu"
+    assert "CPU (slower)" in warning
+    assert "sm_61" in warning
+
+
+def test_resolve_device_takes_the_gpu_when_the_probe_passes(monkeypatch):
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(engine_separator, "probe_cuda", lambda *a, **k: (True, "ok"))
+
+    assert resolve_device("auto") == ("cuda", None)
+
+
+def test_resolve_device_is_silent_on_auto_without_any_gpu(monkeypatch):
+    """No NVIDIA card is not a fallback; there is nothing to warn about."""
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+
+    assert resolve_device("auto") == ("cpu", None)
+
+    device, warning = resolve_device("cuda")
+    assert device == "cpu"
+    assert "no NVIDIA GPU is visible" in warning
+
+
+def test_probe_cuda_caches_its_verdict(monkeypatch):
+    """Building a CUDA context is expensive; it must happen once per process."""
+    calls = []
+
+    def fake_probe():
+        calls.append(1)
+        return True, "fake"
+
+    monkeypatch.setattr(engine_separator, "_cuda_probe", None)
+    monkeypatch.setattr(engine_separator, "_run_cuda_probe", fake_probe)
+
+    assert probe_cuda() == (True, "fake")
+    assert probe_cuda() == (True, "fake")
+    assert len(calls) == 1
+
+    probe_cuda(force=True)
+    assert len(calls) == 2
 
 
 # =============================================================================

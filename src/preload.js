@@ -38,6 +38,13 @@ contextBridge.exposeInMainWorld('api', {
     getFileInfo: (filePath) => ipcRenderer.invoke('file:getInfo', filePath),
 
     /**
+     * Header-level audio metadata (channels, sample rate, duration) for a
+     * file about to be queued. Resolves with
+     * { ok: true, channels, sampleRate, ... } or { ok: false, reason }.
+     */
+    probeAudio: (filePath) => ipcRenderer.invoke('file:probeAudio', filePath),
+
+    /**
      * Persisted settings. getSettings resolves with
      * { settings, defaults, outputDirUsable }; saveSettings takes a partial
      * patch and resolves with { settings, outputDirUsable }.

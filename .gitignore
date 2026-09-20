@@ -35,7 +35,6 @@ nul
 # Binaries (download separately)
 # Agregamos dll por si alguna dependencia la trae
 resources/bin/ffmpeg/*.exe
-resources/bin/motor/
 *.dll
 
 # Models (large files, download separately)

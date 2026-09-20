@@ -1,151 +1,87 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for motor.py
-Packages Demucs and all dependencies into a standalone executable
+PyInstaller spec for the motor daemon.
+
+Build from the REPO ROOT, not from python/:
+
+    pyinstaller python\\motor.spec --workpath build\\pyinstaller
+
+PyInstaller resolves --distpath and --workpath against the current working
+directory, and package.json expects the result at <root>\\dist\\motor. The
+explicit --workpath keeps PyInstaller's scratch files out of <root>\\build,
+which electron-builder reads as its buildResources directory.
+
+Collection policy
+-----------------
+Almost nothing is collected by hand. pyinstaller-hooks-contrib ships hooks
+for torch, torchaudio and soundfile that already do it properly - hook-torch
+in particular excludes **/*.lib, and torch/lib holds 2.7 GB of static import
+libraries that would otherwise be dragged in as "data". A collect_all() here
+would override that judgement with a worse one.
+
+What has no hook is demucs, and it needs its package data: engine/models.py
+reads demucs/remote/files.txt and demucs/remote/<model>.yaml to resolve a
+model name into checkpoint URLs. Without those two the frozen exe cannot
+work out which weights to fetch.
+
+The runtime import set was measured, not guessed, by importing engine plus
+demucs.api in the venv and reading sys.modules:
+
+    antlr4 cloudpickle colorama demucs dora einops julius lameenc numpy
+    omegaconf openunmix retrying soundfile submitit torch torchaudio torio
+    tqdm treetable typing_extensions yaml
+
+torchaudio is on that list and must stay: demucs/api.py:26 does
+`import torchaudio as ta` at module level, so excluding it breaks the exe
+even though our own I/O never touches it. scipy, sklearn, PIL and matplotlib
+are NOT on that list and are excluded.
+
+Console
+-------
+console=True with hide_console='hide-early'. The whole protocol lives on
+stdin/stdout, and PyInstaller's windowed (console=False) builds are the
+classic reason a frozen child process goes silent: without a console
+subsystem the standard streams can end up as null writers. 'hide-early'
+keeps real streams and still never shows a window; Electron also spawns with
+windowsHide: true.
+
+To get a visible console for debugging, set MOTOR_DEBUG_CONSOLE=1 before
+building:
+
+    $env:MOTOR_DEBUG_CONSOLE = "1"; pyinstaller python\\motor.spec
 """
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
-import sys
 import os
 
-block_cipher = None
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
-# Collect all data files and submodules for complex packages
+# =============================================================================
+# Build-time options
+# =============================================================================
+
+DEBUG_CONSOLE = os.environ.get("MOTOR_DEBUG_CONSOLE", "").lower() not in ("", "0", "false", "no")
+
 datas = []
 binaries = []
 hiddenimports = []
 
 # =============================================================================
-# Demucs Package
+# Demucs (no hook exists for it)
 # =============================================================================
-# Collect all Demucs modules and data files (yaml configs, pretrained models info)
-demucs_datas, demucs_binaries, demucs_hiddenimports = collect_all('demucs')
-datas += demucs_datas
-binaries += demucs_binaries
-hiddenimports += demucs_hiddenimports
 
-# Explicit Demucs submodules (CRITICAL)
-hiddenimports += [
-    'demucs',
-    'demucs.apply',
-    'demucs.separate',
-    'demucs.pretrained',
-    'demucs.hdemucs',
-    'demucs.htdemucs',
-    'demucs.model',
-    'demucs.states',
-    'demucs.repo',
-    'demucs.audio',
-    'demucs.utils',
-]
+# remote/files.txt and remote/*.yaml: the model registry. Required.
+datas += collect_data_files("demucs")
 
-# =============================================================================
-# PyTorch & TorchAudio
-# =============================================================================
-# Collect PyTorch binaries and submodules
-torch_datas, torch_binaries, torch_hiddenimports = collect_all('torch')
-binaries += torch_binaries
-hiddenimports += torch_hiddenimports
-
-# TorchAudio modules (CRITICAL)
-torchaudio_datas, torchaudio_binaries, torchaudio_hiddenimports = collect_all('torchaudio')
-datas += torchaudio_datas
-binaries += torchaudio_binaries
-hiddenimports += torchaudio_hiddenimports
-
-hiddenimports += [
-    'torchaudio',
-    'torchaudio.lib',
-    'torchaudio.lib._torchaudio',
-    'torchaudio.pipelines',
-    'torchaudio.transforms',
-    'torchaudio.functional',
-    'torchaudio.backend',
-    'torchaudio.backend.soundfile_backend',
-]
-
-# =============================================================================
-# Scikit-learn (sklearn)
-# =============================================================================
-sklearn_datas, sklearn_binaries, sklearn_hiddenimports = collect_all('sklearn')
-datas += sklearn_datas
-binaries += sklearn_binaries
-hiddenimports += sklearn_hiddenimports
-
-# Explicit sklearn Cython modules (CRITICAL)
-hiddenimports += [
-    'sklearn.utils._cython_blas',
-    'sklearn.neighbors.typedefs',
-    'sklearn.neighbors.quad_tree',
-    'sklearn.neighbors._partition_nodes',
-    'sklearn.tree',
-    'sklearn.tree._utils',
-    'sklearn.tree._tree',
-    'sklearn.tree._splitter',
-    'sklearn.tree._criterion',
-]
-
-# =============================================================================
-# SciPy
-# =============================================================================
-scipy_datas, scipy_binaries, scipy_hiddenimports = collect_all('scipy')
-datas += scipy_datas
-binaries += scipy_binaries
-hiddenimports += scipy_hiddenimports
-
-# Explicit scipy Cython modules (CRITICAL)
-hiddenimports += [
-    'scipy.special.cython_special',
-    'scipy.spatial.transform._rotation_groups',
-    'scipy._lib.messagestream',
-    'scipy.sparse._sparsetools',
-    'scipy.sparse.csgraph._tools',
-    'scipy.sparse.csgraph._shortest_path',
-    'scipy.sparse.csgraph._traversal',
-    'scipy.sparse.csgraph._min_spanning_tree',
-    'scipy.sparse.csgraph._flow',
-]
-
-# =============================================================================
-# NumPy
-# =============================================================================
-numpy_datas, numpy_binaries, numpy_hiddenimports = collect_all('numpy')
-datas += numpy_datas
-binaries += numpy_binaries
-hiddenimports += numpy_hiddenimports
-
-# =============================================================================
-# Additional Dependencies
-# =============================================================================
-# Collect other common dependencies
-for package in ['julius', 'openunmix', 'einops', 'diffq', 'soundfile']:
-    try:
-        pkg_datas, pkg_binaries, pkg_hiddenimports = collect_all(package)
-        datas += pkg_datas
-        binaries += pkg_binaries
-        hiddenimports += pkg_hiddenimports
-    except Exception:
-        # Package might not be installed, skip
-        pass
-
-# Additional standard library modules that might be missed
-hiddenimports += [
-    'json',
-    'argparse',
-    'subprocess',
-    'sys',
-    'os',
-    'pathlib',
-    'tempfile',
-    'shutil',
-    'hashlib',
-]
+# Model classes are reached through the checkpoint pickles rather than by a
+# visible import, so the module graph cannot find them on its own.
+hiddenimports += collect_submodules("demucs")
 
 # =============================================================================
 # Analysis
 # =============================================================================
+
 a = Analysis(
-    ['motor.py'],
+    ["motor.py"],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -154,43 +90,45 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude unnecessary packages to reduce size
-        'matplotlib',
-        'IPython',
-        'notebook',
-        'jupyter',
-        'PIL',
-        'tkinter',
+        # Superseded by our own float32 I/O; torchaudio >= 2.9 would delegate
+        # save/load to it, which is exactly what this project does not want.
+        "torchcodec",
+        # Not imported by anything on the runtime list, and not installed in
+        # the venv either. Listed so a transitive dependency cannot sneak
+        # them back in and add hundreds of MB.
+        "scipy",
+        "sklearn",
+        "matplotlib",
+        "PIL",
+        "IPython",
+        "notebook",
+        "jupyter",
+        "tkinter",
+        "pytest",
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
 
-# =============================================================================
-# PYZ Archive
-# =============================================================================
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure)
 
 # =============================================================================
-# EXE Configuration
+# EXE / COLLECT
 # =============================================================================
+
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='motor',
+    name="motor",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=True,  # Keep console visible for debugging
+    # UPX corrupts CUDA DLLs. Never turn this on.
+    upx=False,
+    console=True,
+    hide_console=None if DEBUG_CONSOLE else "hide-early",
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -199,16 +137,12 @@ exe = EXE(
     icon=None,
 )
 
-# =============================================================================
-# COLLECT (Bundle all files together)
-# =============================================================================
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
-    name='motor',
+    name="motor",
 )

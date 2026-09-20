@@ -1,19 +1,18 @@
 {
   "name": "poligono-ai-hub",
   "version": "1.0.2",
-  "description": "AI-powered vocal removal & splitter tool for audio and video files",
+  "description": "Local AI stem separation for audio and video: vocal remover and 4-stem splitter, powered by Demucs v4. Runs entirely on your machine.",
   "main": "src/background.js",
   "author": "Polígono Studio",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "private": true,
   "scripts": {
     "start": "electron .",
-    "test:js": "node --test tests/settings.test.js",
     "dev": "electron . --enable-logging",
-    "build": "electron-builder",
-    "dist": "electron-builder",
+    "test:js": "node --test tests/settings.test.js",
+    "build:motor": "pyinstaller python/motor.spec --workpath build/pyinstaller --noconfirm",
     "dist:win": "electron-builder --win",
-    "dist:mac": "electron-builder --mac",
-    "dist:linux": "electron-builder --linux",
+    "release": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
@@ -21,6 +20,17 @@
     "electron-builder": "^26.0.12"
   },
   "dependencies": {},
+  "windowsSigningTemplate": {
+    "_comment_1": "NOT ACTIVE. electron-builder validates its config with additionalProperties:false at every level, so this block cannot sit commented inside `build`. It lives here, outside anything electron-builder reads, so that turning signing on later is a move rather than a rebuild.",
+    "_comment_2": "v1 ships UNSIGNED on purpose. See docs/DISTRIBUTION.md for what SmartScreen shows the customer and what to tell them.",
+    "_comment_3": "To enable: move the `azureSignOptions` object below into `build.win`, fill in the three Azure Trusted Signing values, and set the AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET environment variables on the build machine. publisherName must match the certificate exactly. Verified against app-builder-lib 26.4.0 (out/options/winOptions.d.ts).",
+    "azureSignOptions": {
+      "publisherName": "Polígono Studio",
+      "endpoint": "https://eus.codesigning.azure.net",
+      "codeSigningAccountName": "TODO",
+      "certificateProfileName": "TODO"
+    }
+  },
   "build": {
     "appId": "com.poligonostudio.aihub",
     "productName": "Polígono AI Hub",
@@ -49,13 +59,6 @@
         "filter": [
           "**/*"
         ]
-      },
-      {
-        "from": "resources/models",
-        "to": "models",
-        "filter": [
-          "**/*"
-        ]
       }
     ],
     "win": {
@@ -68,10 +71,11 @@
         }
       ],
       "icon": "src/renderer/assets/icon.ico",
-      "artifactName": "${productName}-${version}-Setup.${ext}"
+      "artifactName": "Poligono-AI-Hub-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
@@ -80,24 +84,6 @@
       "uninstallerIcon": "src/renderer/assets/icon.ico",
       "installerHeaderIcon": "src/renderer/assets/icon.ico",
       "license": "LICENSE.txt"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "resources/assets/logo.icns",
-      "category": "public.app-category.music",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "icon": "resources/assets/icons",
-      "category": "Audio",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "publish": null
   },

@@ -20,6 +20,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const readline = require('readline');
 const settings = require('./settings');
+const { findFfprobe, probeAudio } = require('./probe');
 
 // =============================================================================
 // CONFIGURATION
@@ -465,6 +466,30 @@ class ProcessManager {
 const processManager = new ProcessManager();
 
 // =============================================================================
+// MEDIA PROBE
+// =============================================================================
+
+/**
+ * ffprobe, resolved once per session: the same binary the motor is handed.
+ * `undefined` means "not looked up yet", `null` means "looked up, not there".
+ */
+let ffprobePath;
+
+function getFfprobePath() {
+    if (ffprobePath === undefined) {
+        ffprobePath = findFfprobe({
+            isPackaged: app.isPackaged,
+            resourcesPath: process.resourcesPath,
+            repoRoot: path.join(__dirname, '..'),
+        });
+        if (!ffprobePath) {
+            console.warn('[Probe] ffprobe not found; queued files carry no channel notice');
+        }
+    }
+    return ffprobePath;
+}
+
+// =============================================================================
 // WINDOW MANAGEMENT
 // =============================================================================
 
@@ -637,6 +662,19 @@ ipcMain.handle('file:getInfo', (event, filePath) => {
     } catch (err) {
         return { valid: false, reason: err.message };
     }
+});
+
+/**
+ * Header-level audio metadata for a file entering the queue, so the row can
+ * carry its channel notice before anything is processed. Resolves with
+ * { ok: false, reason } rather than rejecting: no probe just means no notice.
+ */
+ipcMain.handle('file:probeAudio', (event, filePath) => {
+    const ffprobe = getFfprobePath();
+    if (!ffprobe || !filePath) {
+        return { ok: false, reason: 'ffprobe not available' };
+    }
+    return probeAudio(ffprobe, filePath);
 });
 
 // =============================================================================

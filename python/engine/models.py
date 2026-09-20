@@ -22,6 +22,7 @@ with the expected sha256 prefix embedded in the file name ("<sig>-<hash>.th").
 import hashlib
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -77,13 +78,30 @@ def _demucs_remote_dir() -> Path:
 
     Importing `demucs` itself is cheap (its __init__ only sets __version__);
     it is demucs.pretrained that pulls in torch.
+
+    The PyInstaller bundle is checked as well. There the data files land in
+    <sys._MEIPASS>/demucs/remote, which is normally where demucs.__file__
+    points too, but a frozen module's __file__ is synthesised and not worth
+    betting the model registry on: without this directory we cannot resolve a
+    model name, and the fallback (letting Demucs download it itself) writes
+    to stdout, which is the daemon's JSON channel.
     """
     import demucs
 
-    remote = Path(demucs.__file__).resolve().parent / "remote"
-    if not remote.is_dir():
-        raise CheckpointError(f"demucs model registry not found at {remote}")
-    return remote
+    candidates = []
+    if getattr(demucs, "__file__", None):
+        candidates.append(Path(demucs.__file__).resolve().parent / "remote")
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "demucs" / "remote")
+
+    for remote in candidates:
+        if remote.is_dir():
+            return remote
+    raise CheckpointError(
+        "demucs model registry not found (looked in: "
+        + ", ".join(str(c) for c in candidates) + ")"
+    )
 
 
 def _parse_files_txt(path: Path) -> Dict[str, str]:

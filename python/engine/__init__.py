@@ -63,6 +63,7 @@ from .separator import (
     build_outputs,
     describe_device,
     mix_stems,
+    probe_cuda,
     resolve_device,
     subtract_from_source,
 )
@@ -112,6 +113,7 @@ __all__ = [
     "build_outputs",
     "describe_device",
     "mix_stems",
+    "probe_cuda",
     "resolve_device",
     "subtract_from_source",
 ]

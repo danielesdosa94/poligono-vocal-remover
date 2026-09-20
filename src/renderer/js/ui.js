@@ -114,13 +114,22 @@ function logConsole(message, level = 'info') {
  *
  * A 5.1 downmix or a mono source changes what the client gets, so it cannot
  * be left buried in the debug log where nobody reads it.
+ *
+ * Two sources, one look: `notices` come from probing the file as it was
+ * queued and are { key, values } so they follow the language; `warnings`
+ * come from the motor mid-run and arrive already worded.
  */
 function renderJobWarnings(job) {
-    if (!job.warnings || job.warnings.length === 0) return '';
-    const lines = job.warnings
+    const dict = getDict();
+    const lines = [
+        ...(job.notices || []).map(n => interpolate(dict[n.key] || n.key, n.values)),
+        ...(job.warnings || []),
+    ];
+    if (lines.length === 0) return '';
+    const html = lines
         .map(message => `<div class="job-warning">⚠️ ${escapeHtml(message)}</div>`)
         .join('');
-    return `<div class="job-warnings">${lines}</div>`;
+    return `<div class="job-warnings">${html}</div>`;
 }
 
 function renderJob(job) {
@@ -225,7 +234,8 @@ function updateLanguage(lang) {
         elements.modeDescription.textContent = dict.mode_splitter_subtitle;
     }
 
-    // Update job details for pending jobs (Ready/Waiting)
+    // Job details for pending jobs (Ready/Waiting), plus any row carrying a
+    // translated notice, whatever state it is in.
     state.queue.forEach(job => {
         if (job.status === 'pending') {
             if (job.detail === 'Ready' || job.detail === 'Listo') {
@@ -233,6 +243,8 @@ function updateLanguage(lang) {
             } else if (job.detail === 'Waiting...' || job.detail === 'Esperando...') {
                 job.detail = dict.job_waiting;
             }
+            renderJob(job);
+        } else if (job.notices && job.notices.length > 0) {
             renderJob(job);
         }
     });
